@@ -20,6 +20,7 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [config](#config)
   - [whoami](#whoami)
   - [my-events](#my-events)
+  - [organizations](#organizations)
   - [events](#events)
   - [partnerships](#partnerships)
   - [org-partnerships](#org-partnerships)
@@ -341,8 +342,20 @@ phq whoami [--json]
 List all events the authenticated user belongs to (no event/partnership context required).
 
 ```bash
-phq my-events list [--json]
+phq my-events list [--page N] [--per-page N] [--json]
 ```
+
+---
+
+### organizations
+
+List all organizations (customers) the authenticated user belongs to. Global endpoint — no event/partnership context required.
+
+```bash
+phq organizations list [--page N] [--per-page N] [--json]
+```
+
+Returns `id`, `name`, `permalink`, and `owner` (whether you are the owner of the organization).
 
 ---
 
