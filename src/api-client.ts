@@ -50,7 +50,14 @@ export function createClient(opts: ApiOptions): AxiosInstance {
         }
 
         if (status === 404) {
-          console.error(chalk.red('✗') + ' Resource not found.')
+          console.error(
+            chalk.red('✗') + ' Resource not found.\n' +
+            chalk.dim(
+              '  Hint: Your --event or --partnership may be incorrect for this environment.\n' +
+              "  Run 'phq whoami' to check your current context, or\n" +
+              "  'phq my-events list' to find your correct event permalink and partnership ID."
+            )
+          )
           process.exit(1)
         }
 
