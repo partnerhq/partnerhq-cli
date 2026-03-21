@@ -41,8 +41,33 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
 
 **Requirements:** Node.js 18 or later.
 
+### From npm (once published)
+
 ```bash
 npm install -g partnerhq-cli
+```
+
+### From source (local development)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/partnerhq/partnerhq-cli.git
+cd partnerhq-cli
+
+# 2. Install dependencies
+npm install
+
+# 3. Build the TypeScript source
+npm run build
+
+# 4. Link the binaries globally so `phq` and `partnerhq` are available system-wide
+npm link
+```
+
+To unlink later:
+
+```bash
+npm unlink -g partnerhq-cli
 ```
 
 After installation, both `phq` and `partnerhq` are available:
