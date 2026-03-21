@@ -1,1 +1,686 @@
-# partnerhq-cli
+# PartnerHQ CLI
+
+The official command-line interface for the [PartnerHQ](https://app.partnerhq.com) API. Manage your events, partnerships, tasks, resources, and more from your terminal or CI/CD pipelines.
+
+You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
+
+---
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Authentication](#authentication)
+- [Environment Variables](#environment-variables)
+- [Test Mode](#test-mode)
+- [Global Options](#global-options)
+- [Commands](#commands)
+  - [auth](#auth)
+  - [my-events](#my-events)
+  - [events](#events)
+  - [partnerships](#partnerships)
+  - [org-partnerships](#org-partnerships)
+  - [tasks](#tasks)
+  - [resources](#resources)
+  - [internal-tasks](#internal-tasks)
+  - [announcements](#announcements)
+  - [tags](#tags)
+  - [task-completions](#task-completions)
+  - [authorizations](#authorizations)
+  - [messages](#messages)
+  - [invitations](#invitations)
+  - [partner profile](#partner-profile)
+  - [partner org-partnerships](#partner-org-partnerships)
+  - [partner task-completions](#partner-task-completions)
+- [Filtering with Ransack](#filtering-with-ransack)
+- [Pagination](#pagination)
+- [Output Modes](#output-modes)
+
+---
+
+## Installation
+
+**Requirements:** Node.js 18 or later.
+
+```bash
+npm install -g partnerhq-cli
+```
+
+After installation, both `phq` and `partnerhq` are available:
+
+```bash
+phq --version
+partnerhq --version
+```
+
+---
+
+## Authentication
+
+All API requests require an OAuth 2.0 Bearer token. Use the `auth login` command to obtain and store one.
+
+### Log in
+
+```bash
+phq auth login --email you@example.com --password yourpassword
+```
+
+Your token is saved to `~/.partnerhq/config.json` and used automatically for all subsequent commands.
+
+### Log out
+
+```bash
+phq auth logout
+```
+
+This revokes the token on the server and removes it from the local config.
+
+### Check status
+
+```bash
+phq auth status
+```
+
+---
+
+## Environment Variables
+
+These variables override saved config values. Useful in CI/CD pipelines.
+
+| Variable          | Description                                                  |
+|-------------------|--------------------------------------------------------------|
+| `PHQ_API_KEY`     | OAuth Bearer token (overrides saved token)                   |
+| `PHQ_EVENT`       | Default event permalink (used when `--event` is not passed)  |
+| `PHQ_PARTNERSHIP` | Default partnership ID (used when `--partnership` is not passed) |
+| `PHQ_TEST`        | Set to `1` or `true` to enable test mode                     |
+
+**Example — CI pipeline:**
+
+```bash
+export PHQ_API_KEY=your_token
+export PHQ_EVENT=acme-summit-2025
+export PHQ_PARTNERSHIP=42
+
+phq tasks list --filter "status_filter=published"
+```
+
+---
+
+## Test Mode
+
+Pass `--test` to any command (or set `PHQ_TEST=1`) to point the CLI at your local development environment (`http://phq.test`) instead of production (`https://app.partnerhq.com`).
+
+Test mode uses a **separate token** stored in `~/.partnerhq/config.json` under the `test` key, so your production credentials are never overwritten.
+
+```bash
+# Log in to local dev
+phq auth login --email dev@example.com --password devpassword --test
+
+# Use local dev for any command
+phq tasks list --event my-event --partnership 1 --test
+
+# Via env var (useful in scripts)
+PHQ_TEST=1 phq tasks list --event my-event --partnership 1
+```
+
+**Config file structure:**
+
+```json
+{
+  "production": { "token": "prod_token_here" },
+  "test":       { "token": "test_token_here" }
+}
+```
+
+---
+
+## Global Options
+
+These options are available on every command:
+
+| Option                   | Description                                              |
+|--------------------------|----------------------------------------------------------|
+| `--test`                 | Use local dev environment (`http://phq.test`)            |
+| `--json`                 | Output raw JSON instead of a formatted table             |
+| `--event <permalink>`    | Event permalink (overrides `PHQ_EVENT`)                  |
+| `--partnership <id>`     | Your partnership ID (overrides `PHQ_PARTNERSHIP`)        |
+
+---
+
+## Commands
+
+Most resource commands require an event permalink and a partnership ID. Supply them via `--event`/`--partnership` flags or the `PHQ_EVENT`/`PHQ_PARTNERSHIP` environment variables.
+
+---
+
+### auth
+
+Manage authentication.
+
+```bash
+phq auth login --email <email> --password <password> [--test]
+phq auth logout [--test]
+phq auth status [--test]
+```
+
+---
+
+### my-events
+
+List all events the authenticated user belongs to (no event/partnership context required).
+
+```bash
+phq my-events list [--json]
+```
+
+---
+
+### events
+
+Manage events (projects). These commands do **not** require `--event`/`--partnership`.
+
+```bash
+# Get an event by permalink
+phq events get <permalink> [--json]
+
+# Create a new event
+phq events create --name "Acme Summit 2025" [--welcome-message "Welcome!"] [--brand-color "#FF5733"]
+
+# Update an event
+phq events update <permalink> [--name "New Name"] [--welcome-message "..."] [--brand-color "#000000"]
+
+# Delete an event
+phq events delete <permalink>
+```
+
+---
+
+### partnerships
+
+Manage people (partners and hosts) within an event.
+
+```bash
+phq partnerships list   --event <permalink> --partnership <id> [--filter "..."] [--page N] [--per-page N] [--sort "field asc"]
+phq partnerships get    <id>   --event <permalink> --partnership <id>
+phq partnerships create --event <permalink> --partnership <id> --first-name <name> --last-name <name> --email <email> [--host] [--read-only] [--notes "..."]
+phq partnerships update <id>   --event <permalink> --partnership <id> [--first-name <name>] [--email <email>] [--host true|false] [--read-only true|false]
+phq partnerships delete <id>   --event <permalink> --partnership <id>
+
+# Find or create by name + email (idempotent)
+phq partnerships retrieve --event <permalink> --partnership <id> --first-name <name> --last-name <name> --email <email>
+```
+
+**Example filters:**
+
+```bash
+phq partnerships list --event acme-2025 --partnership 1 --filter "host_eq=true"
+phq partnerships list --event acme-2025 --partnership 1 --filter "email_cont=@acme.com"
+phq partnerships list --event acme-2025 --partnership 1 --filter "first_name_cont=jane" --filter "read_only_eq=false"
+```
+
+---
+
+### org-partnerships
+
+Manage organizations within an event.
+
+```bash
+phq org-partnerships list    --event <permalink> --partnership <id> [--filter "..."] [--page N] [--per-page N]
+phq org-partnerships get     <id>   --event <permalink> --partnership <id>
+phq org-partnerships create  --event <permalink> --partnership <id> --name <name> [--host]
+phq org-partnerships update  <id>   --event <permalink> --partnership <id> [--name <name>] [--host true|false]
+phq org-partnerships delete  <id>   --event <permalink> --partnership <id>
+
+# Find or create by name (idempotent)
+phq org-partnerships retrieve --event <permalink> --partnership <id> --name <name>
+```
+
+**Example filters:**
+
+```bash
+# Only non-archived orgs
+phq org-partnerships list --event acme-2025 --partnership 1 --filter "archived_at_null=1"
+
+# Orgs with no connected users (Ransack scope)
+phq org-partnerships list --event acme-2025 --partnership 1 --filter "no_connected_users=1"
+
+# Host organizations only
+phq org-partnerships list --event acme-2025 --partnership 1 --filter "host_eq=true"
+```
+
+---
+
+### tasks
+
+Manage to-do tasks within an event.
+
+```bash
+phq tasks list    --event <permalink> --partnership <id> [--filter "..."] [--page N] [--per-page N] [--sort "position asc"]
+phq tasks get     <id>   --event <permalink> --partnership <id>
+phq tasks create  --event <permalink> --partnership <id> --label <label> [--description "..."] [--due-at "2025-06-01T00:00:00Z"] [--pinned] [--locked] [--advance] [--notify-hosts] [--go-to-link <url>]
+phq tasks update  <id>   --event <permalink> --partnership <id> [--label <label>] [--pinned true|false] [--locked true|false]
+phq tasks delete  <id>   --event <permalink> --partnership <id>
+```
+
+**Example filters:**
+
+```bash
+# Published tasks only (Ransack scope)
+phq tasks list --event acme-2025 --partnership 1 --filter "status_filter=published"
+
+# Draft tasks only
+phq tasks list --event acme-2025 --partnership 1 --filter "status_filter=draft"
+
+# Archived tasks
+phq tasks list --event acme-2025 --partnership 1 --filter "status_filter=archived"
+
+# Multiple statuses (Ransack scope)
+phq tasks list --event acme-2025 --partnership 1 --filter "status_in[]=published" --filter "status_in[]=draft"
+
+# Pinned tasks
+phq tasks list --event acme-2025 --partnership 1 --filter "pinned_eq=true"
+
+# Tasks with overdue completions (Ransack scope)
+phq tasks list --event acme-2025 --partnership 1 --filter "with_overdue_completions=1"
+
+# Tasks due before a date
+phq tasks list --event acme-2025 --partnership 1 --filter "due_at_lt=2025-07-01"
+
+# Tasks containing a keyword
+phq tasks list --event acme-2025 --partnership 1 --filter "label_cont=onboarding"
+```
+
+---
+
+### resources
+
+Manage resource tasks (links, documents) within an event. Resources are a subtype of tasks.
+
+```bash
+phq resources list    --event <permalink> --partnership <id> [--filter "..."]
+phq resources get     <id>   --event <permalink> --partnership <id>
+phq resources create  --event <permalink> --partnership <id> --label <label> [--go-to-link <url>] [--go-to-link-instructions "..."] [--description "..."] [--pinned] [--locked]
+phq resources update  <id>   --event <permalink> --partnership <id> [--label <label>] [--go-to-link <url>]
+phq resources delete  <id>   --event <permalink> --partnership <id>
+```
+
+Resources support the same filters as [tasks](#tasks) since they share the same underlying model.
+
+---
+
+### internal-tasks
+
+Manage internal (host-only) tasks within an event.
+
+```bash
+phq internal-tasks list    --event <permalink> --partnership <id> [--filter "..."]
+phq internal-tasks get     <id>   --event <permalink> --partnership <id>
+phq internal-tasks create  --event <permalink> --partnership <id> --label <label> [--description "..."] [--due-at "..."] [--pinned] [--locked]
+phq internal-tasks update  <id>   --event <permalink> --partnership <id> [--label <label>] [--pinned true|false]
+phq internal-tasks delete  <id>   --event <permalink> --partnership <id>
+```
+
+---
+
+### announcements
+
+Manage announcements within an event. Sent announcements are immutable.
+
+```bash
+phq announcements list    --event <permalink> --partnership <id> [--filter "..."]
+phq announcements get     <id>   --event <permalink> --partnership <id>
+phq announcements create  --event <permalink> --partnership <id> --text "Message body" [--segment all|completed|incomplete|overdue] [--scheduled-at "2025-06-01T09:00:00Z"] [--notify all|task|tag|organization_partnership]
+phq announcements update  <id>   --event <permalink> --partnership <id> [--text "..."] [--segment "..."] [--scheduled-at "..."]
+phq announcements delete  <id>   --event <permalink> --partnership <id>
+```
+
+> **Note:** Omitting `--scheduled-at` sends the announcement immediately (`schedule_now: true`).
+
+**Segment values:**
+
+| Value                    | Recipients                                  |
+|--------------------------|---------------------------------------------|
+| `all`                    | Everyone (default)                          |
+| `completed`              | Partners who completed the linked task      |
+| `incomplete`             | Partners who have not completed the task    |
+| `overdue`                | Partners with overdue completions           |
+| `organization_partnerships` | Members of specific organizations        |
+| `partnerships`           | Specific individual partnerships            |
+
+---
+
+### tags
+
+Manage tags within an event.
+
+```bash
+phq tags list    --event <permalink> --partnership <id> [--filter "..."]
+phq tags get     <id>   --event <permalink> --partnership <id>
+phq tags create  --event <permalink> --partnership <id> --name <name> [--hex-color "#FF5733"] [--font-color "#FFFFFF"]
+phq tags update  <id>   --event <permalink> --partnership <id> [--name <name>] [--hex-color "#..."] [--font-color "#..."]
+phq tags delete  <id>   --event <permalink> --partnership <id>
+```
+
+**Example filters:**
+
+```bash
+# Unused tags (Ransack scope — tags with no active taggings)
+phq tags list --event acme-2025 --partnership 1 --filter "unused=1"
+
+# Tags matching a name
+phq tags list --event acme-2025 --partnership 1 --filter "name_cont=sponsor"
+```
+
+---
+
+### task-completions
+
+Manage task assignment records (which orgs/partners are assigned to which tasks). Task completions cannot be created or deleted directly — they are created automatically when tasks are assigned.
+
+```bash
+phq task-completions list     --event <permalink> --partnership <id> [--filter "..."] [--sort "due_at asc"]
+phq task-completions get      <id>   --event <permalink> --partnership <id>
+phq task-completions update   <id>   --event <permalink> --partnership <id> [--enabled true|false] [--due-at "..."] [--assigned-partnership-id <id>]
+phq task-completions complete <id>   --event <permalink> --partnership <id>
+phq task-completions reset    <id>   --event <permalink> --partnership <id>
+```
+
+**Example filters:**
+
+```bash
+# Enabled (active) assignments only
+phq task-completions list --event acme-2025 --partnership 1 --filter "enabled_eq=true"
+
+# Completed assignments
+phq task-completions list --event acme-2025 --partnership 1 --filter "completed_at_not_null=1"
+
+# Incomplete assignments
+phq task-completions list --event acme-2025 --partnership 1 --filter "completed_at_null=1"
+
+# Assignments for a specific task
+phq task-completions list --event acme-2025 --partnership 1 --filter "task_id_eq=123"
+
+# Assignments for a specific organization
+phq task-completions list --event acme-2025 --partnership 1 --filter "partnerable_type_eq=OrganizationPartnership" --filter "partnerable_id_eq=456"
+
+# Overdue assignments
+phq task-completions list --event acme-2025 --partnership 1 --filter "enabled_eq=true" --filter "completed_at_null=1" --filter "due_at_lt=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+---
+
+### authorizations
+
+Manage per-partner permission records. Authorizations cannot be created or deleted — they are managed automatically.
+
+```bash
+phq authorizations list         --event <permalink> --partnership <id> [--filter "..."]
+phq authorizations get          <id>   --event <permalink> --partnership <id>
+phq authorizations update       <id>   --event <permalink> --partnership <id> [--can-view true|false] [--can-notify true|false] [--can-edit true|false]
+
+# Update multiple authorizations in one request
+phq authorizations bulk-update  --event <permalink> --partnership <id> \
+  --data '[{"id": 1, "can_view": true}, {"id": 2, "can_notify": false}]'
+```
+
+**Example filters:**
+
+```bash
+phq authorizations list --event acme-2025 --partnership 1 --filter "can_view_eq=true"
+phq authorizations list --event acme-2025 --partnership 1 --filter "item_type_eq=OrganizationPartnership"
+```
+
+---
+
+### messages
+
+Read chat messages within an event (read-only).
+
+```bash
+phq messages list --event <permalink> --partnership <id> [--filter "..."] [--sort "created_at desc"]
+phq messages get  <id>   --event <permalink> --partnership <id>
+```
+
+**Example filters:**
+
+```bash
+# Exclude bot messages (Ransack scope)
+phq messages list --event acme-2025 --partnership 1 --filter "non_bot=1"
+
+# Messages containing text
+phq messages list --event acme-2025 --partnership 1 --filter "text_cont=hello"
+```
+
+---
+
+### invitations
+
+Read invitations within an event (read-only).
+
+```bash
+phq invitations list --event <permalink> --partnership <id> [--filter "..."]
+phq invitations get  <id>   --event <permalink> --partnership <id>
+```
+
+**Example filters:**
+
+```bash
+# Pending invitations only
+phq invitations list --event acme-2025 --partnership 1 --filter "state_eq=pending"
+
+# Invitations by email
+phq invitations list --event acme-2025 --partnership 1 --filter "email_cont=@acme.com"
+```
+
+---
+
+### partner profile
+
+View and update your own profile as a partner within an event.
+
+```bash
+phq partner profile get    --event <permalink> --partnership <id>
+phq partner profile update --event <permalink> --partnership <id> \
+  [--first-name <name>] [--last-name <name>] \
+  [--notify-for-new-chats true|false] \
+  [--notify-for-completed-tasks true|false] \
+  [--notify-for-task-reminders true|false]
+```
+
+---
+
+### partner org-partnerships
+
+View organizations you belong to (as a partner, read-only).
+
+```bash
+phq partner org-partnerships list --event <permalink> --partnership <id> [--filter "..."]
+phq partner org-partnerships get  <id>   --event <permalink> --partnership <id>
+```
+
+---
+
+### partner task-completions
+
+View and interact with your own task assignments as a partner.
+
+```bash
+phq partner task-completions list     --event <permalink> --partnership <id> [--filter "..."]
+phq partner task-completions get      <id>   --event <permalink> --partnership <id>
+phq partner task-completions update   <id>   --event <permalink> --partnership <id> [--due-at "..."]
+phq partner task-completions complete <id>   --event <permalink> --partnership <id>
+phq partner task-completions reset    <id>   --event <permalink> --partnership <id>
+```
+
+---
+
+## Filtering with Ransack
+
+All `list` commands support powerful server-side filtering via the `--filter` flag. You can pass multiple `--filter` flags and they are ANDed together.
+
+```bash
+phq tasks list --event acme-2025 --partnership 1 \
+  --filter "label_cont=onboarding" \
+  --filter "pinned_eq=true"
+```
+
+Filters use the format `predicate=value`, where the predicate is a Ransack search predicate.
+
+### Standard Ransack Predicates
+
+These work on any column of the resource (use the exact database column name as the field part):
+
+| Predicate         | Description                                                        | Example                              |
+|-------------------|--------------------------------------------------------------------|--------------------------------------|
+| `_eq`             | Exact match                                                        | `host_eq=true`                       |
+| `_not_eq`         | Not equal                                                          | `state_not_eq=pending`               |
+| `_cont`           | Contains (case-insensitive)                                        | `label_cont=signup`                  |
+| `_not_cont`       | Does not contain                                                   | `email_not_cont=@spam.com`           |
+| `_start`          | Starts with                                                        | `name_start=Acme`                    |
+| `_end`            | Ends with                                                          | `email_end=.org`                     |
+| `_matches`        | SQL LIKE pattern (`%` wildcard)                                    | `name_matches=%Corp%`                |
+| `_gt`             | Greater than                                                       | `due_at_gt=2025-01-01`               |
+| `_gteq`           | Greater than or equal                                              | `due_at_gteq=2025-01-01`             |
+| `_lt`             | Less than                                                          | `due_at_lt=2025-12-31`               |
+| `_lteq`           | Less than or equal                                                 | `created_at_lteq=2025-06-01`         |
+| `_null`           | Is NULL (value is ignored)                                         | `completed_at_null=1`                |
+| `_not_null`       | Is NOT NULL (value is ignored)                                     | `completed_at_not_null=1`            |
+| `_in`             | In a comma-separated list                                          | `id_in=1,2,3`                        |
+| `_not_in`         | Not in a comma-separated list                                      | `id_not_in=4,5`                      |
+| `_true`           | Is true (boolean shorthand)                                        | `pinned_true=1`                      |
+| `_false`          | Is false (boolean shorthand)                                       | `locked_false=1`                     |
+
+### Sorting
+
+Use `--sort` to control the result order:
+
+```bash
+phq tasks list --event acme-2025 --partnership 1 --sort "created_at desc"
+phq tasks list --event acme-2025 --partnership 1 --sort "label asc"
+phq partnerships list --event acme-2025 --partnership 1 --sort "last_name asc"
+```
+
+### Per-Resource Ransack Scopes
+
+These are named scopes exposed specifically by each model. Pass the scope name as the predicate and any required value.
+
+#### Tasks, Resources, InternalTasks
+
+| Scope                      | Value                                   | Description                                                     |
+|----------------------------|-----------------------------------------|-----------------------------------------------------------------|
+| `status_filter`            | `published`, `draft`, `archived`        | Filter by publication/archival status                           |
+| `status_in[]`              | `published`, `draft`, `archived`        | Match any of the given statuses (pass multiple filters)         |
+| `with_overdue_completions` | `1` (any truthy value)                  | Tasks that have at least one enabled, incomplete, overdue assignment |
+
+```bash
+# Draft tasks
+phq tasks list --event acme-2025 --partnership 1 --filter "status_filter=draft"
+
+# Published OR archived
+phq tasks list --event acme-2025 --partnership 1 \
+  --filter "status_in[]=published" --filter "status_in[]=archived"
+
+# Tasks with overdue completions
+phq tasks list --event acme-2025 --partnership 1 --filter "with_overdue_completions=1"
+```
+
+#### Tags
+
+| Scope    | Value                  | Description                                                  |
+|----------|------------------------|--------------------------------------------------------------|
+| `unused` | `1` (any truthy value) | Tags that have no active taggings (no orgs, no active tasks) |
+
+```bash
+phq tags list --event acme-2025 --partnership 1 --filter "unused=1"
+```
+
+#### OrganizationPartnerships
+
+| Scope                | Value                  | Description                                                        |
+|----------------------|------------------------|--------------------------------------------------------------------|
+| `no_connected_users` | `1` (any truthy value) | Organizations where no member partnerships have a connected user account |
+
+```bash
+phq org-partnerships list --event acme-2025 --partnership 1 --filter "no_connected_users=1"
+```
+
+#### Messages
+
+| Scope     | Value                  | Description                              |
+|-----------|------------------------|------------------------------------------|
+| `non_bot` | `1` (any truthy value) | Exclude messages sent by bot partnerships |
+
+```bash
+phq messages list --event acme-2025 --partnership 1 --filter "non_bot=1"
+```
+
+### Filterable Columns by Resource
+
+Below is a reference of the most useful filterable columns for each resource.
+
+#### Partnerships
+
+`id`, `first_name`, `last_name`, `email`, `host`, `read_only`, `owner`, `bot`, `user_id`, `notes`, `notify_for_new_chats`, `notify_for_completed_tasks`, `notify_for_task_reminders`, `created_at`, `updated_at`
+
+#### OrganizationPartnerships
+
+`id`, `name`, `host`, `archived_at`, `created_at`, `updated_at`
+
+#### Tasks / Resources / InternalTasks
+
+`id`, `label`, `description`, `type`, `pinned`, `locked`, `advance`, `due_at`, `published_at`, `archived`, `position`, `notify_hosts_on_completion`, `go_to_link`, `has_go_to_link`, `created_at`, `updated_at`
+
+#### TaskCompletions
+
+`id`, `task_id`, `partnerable_type`, `partnerable_id`, `enabled`, `completed_at`, `due_at`, `assigned_partnership_id`, `state`, `created_at`, `updated_at`
+
+#### Announcements
+
+`id`, `text`, `segment`, `scheduled_at`, `published_at`, `notify`, `created_at`, `updated_at`
+
+#### Tags
+
+`id`, `name`, `hex_color`, `font_color`, `created_at`, `updated_at`
+
+#### Messages
+
+`id`, `text`, `name`, `welcome_message`, `created_at`, `updated_at`
+
+#### Invitations
+
+`id`, `email`, `state`, `type`, `short_code`, `created_at`, `updated_at`
+
+#### Authorizations
+
+`id`, `can_view`, `can_notify`, `can_edit`, `item_type`, `created_at`, `updated_at`
+
+---
+
+## Pagination
+
+All `list` commands support `--page` and `--per-page`:
+
+```bash
+phq partnerships list --event acme-2025 --partnership 1 --page 2 --per-page 50
+```
+
+- Default: `--page 1`, `--per-page 30`
+- Maximum: `--per-page 250`
+
+The table footer shows pagination info: `Page 1 · 30 of 142 total (30 per page)`.
+
+---
+
+## Output Modes
+
+By default, results are displayed as formatted tables. Add `--json` to any command to get raw JSON output — useful for piping into `jq` or other tools.
+
+```bash
+# Formatted table (default)
+phq tasks list --event acme-2025 --partnership 1
+
+# Raw JSON
+phq tasks list --event acme-2025 --partnership 1 --json
+
+# Pipe into jq
+phq tasks list --event acme-2025 --partnership 1 --json | jq '.collection[].label'
+```
