@@ -1,7 +1,8 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse } from '../api-client'
-import { printList, printObject, printSuccess } from '../output'
+import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
+import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
+import { confirmOrExit } from '../prompt'
 
 const LIST_COLS = ['id', 'name', 'hex_color', 'font_color', 'created_at']
 
@@ -19,13 +20,13 @@ export function registerTagsCommands(program: Command): void {
     .option('--sort <predicate>', 'Sort column (e.g. name asc)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
-      const response = await client.get(
-        `/api/v1/e/${event}/p/${partnership}/tags`,
-        { params: { q, page: opts.page, per_page: opts.perPage } }
+      const response = await withSpinner('Fetching tags...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/tags`, { params: { q, page: opts.page, per_page: opts.perPage } })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -35,9 +36,12 @@ export function registerTagsCommands(program: Command): void {
     .description('Get a single tag by ID')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/e/${event}/p/${partnership}/tags/${id}`)
+      const response = await withSpinner('Fetching tag...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/tags/${id}`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -49,12 +53,15 @@ export function registerTagsCommands(program: Command): void {
     .option('--font-color <hex>', 'Tag text color (e.g. #FFFFFF)', '#EEEEEE')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = { name: opts.name }
       if (opts.hexColor) body.hex_color = opts.hexColor
       if (opts.fontColor) body.font_color = opts.fontColor
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/tags`, { tag: body })
+      const response = await withSpinner('Creating tag...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/tags`, { tag: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -66,13 +73,16 @@ export function registerTagsCommands(program: Command): void {
     .option('--font-color <hex>', 'New text color')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {}
       if (opts.name) body.name = opts.name
       if (opts.hexColor) body.hex_color = opts.hexColor
       if (opts.fontColor) body.font_color = opts.fontColor
-      const response = await client.patch(`/api/v1/e/${event}/p/${partnership}/tags/${id}`, { tag: body })
+      const response = await withSpinner('Updating tag...', () =>
+        client.patch(`/api/v1/e/${event}/p/${partnership}/tags/${id}`, { tag: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -81,9 +91,13 @@ export function registerTagsCommands(program: Command): void {
     .description('Delete a tag')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Delete tag ${id}?`)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      await client.delete(`/api/v1/e/${event}/p/${partnership}/tags/${id}`)
+      await withSpinner('Deleting tag...', () =>
+        client.delete(`/api/v1/e/${event}/p/${partnership}/tags/${id}`)
+      )
       printSuccess(`Tag ${id} deleted.`)
     })
 }

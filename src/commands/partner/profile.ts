@@ -1,6 +1,6 @@
 import { Command } from 'commander'
-import { createClient } from '../../api-client'
-import { printObject } from '../../output'
+import { createClient, withSpinner } from '../../api-client'
+import { printObject, printBanner } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
 
 export function registerPartnerProfileCommands(cmd: Command): void {
@@ -13,9 +13,12 @@ export function registerPartnerProfileCommands(cmd: Command): void {
     .description("Get your own partner profile")
     .action(async (_opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/e/${event}/p/${partnership}/partner/profile`)
+      const response = await withSpinner('Fetching profile...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/partner/profile`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -29,6 +32,7 @@ export function registerPartnerProfileCommands(cmd: Command): void {
     .option('--notify-for-task-reminders <bool>', 'Notify for task reminders (true/false)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {}
@@ -37,7 +41,9 @@ export function registerPartnerProfileCommands(cmd: Command): void {
       if (opts.notifyForNewChats !== undefined) body.notify_for_new_chats = opts.notifyForNewChats === 'true'
       if (opts.notifyForCompletedTasks !== undefined) body.notify_for_completed_tasks = opts.notifyForCompletedTasks === 'true'
       if (opts.notifyForTaskReminders !== undefined) body.notify_for_task_reminders = opts.notifyForTaskReminders === 'true'
-      const response = await client.patch(`/api/v1/e/${event}/p/${partnership}/partner/profile`, { partnership: body })
+      const response = await withSpinner('Updating profile...', () =>
+        client.patch(`/api/v1/e/${event}/p/${partnership}/partner/profile`, { partnership: body })
+      )
       printObject(response.data, { json: g.json })
     })
 }

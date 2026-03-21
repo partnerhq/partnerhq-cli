@@ -11,9 +11,16 @@ interface EnvironmentConfig {
   token?: string
 }
 
+interface Defaults {
+  event?: string
+  partnership?: string
+  test?: boolean
+}
+
 interface Config {
   production: EnvironmentConfig
   test: EnvironmentConfig
+  defaults: Defaults
 }
 
 function ensureConfigDir(): void {
@@ -24,7 +31,7 @@ function ensureConfigDir(): void {
 
 function readConfig(): Config {
   if (!fs.existsSync(CONFIG_FILE)) {
-    return { production: {}, test: {} }
+    return { production: {}, test: {}, defaults: {} }
   }
   try {
     const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
@@ -32,9 +39,10 @@ function readConfig(): Config {
     return {
       production: parsed.production ?? {},
       test: parsed.test ?? {},
+      defaults: parsed.defaults ?? {},
     }
   } catch {
-    return { production: {}, test: {} }
+    return { production: {}, test: {}, defaults: {} }
   }
 }
 
@@ -46,8 +54,9 @@ function writeConfig(config: Config): void {
   })
 }
 
+// --- Token management ---
+
 export function getToken(env: Environment): string | undefined {
-  // Env var always wins
   if (process.env.PHQ_API_KEY) return process.env.PHQ_API_KEY
   const config = readConfig()
   return config[env]?.token
@@ -64,6 +73,50 @@ export function clearToken(env: Environment): void {
   config[env] = { ...config[env], token: undefined }
   writeConfig(config)
 }
+
+// --- Defaults management ---
+
+export function getDefaults(): Defaults {
+  return readConfig().defaults
+}
+
+export function getDefault(key: keyof Defaults): string | boolean | undefined {
+  return readConfig().defaults[key]
+}
+
+export function setDefault(key: string, value: string): void {
+  const config = readConfig()
+  if (key === 'test') {
+    config.defaults.test = value === 'true' || value === '1'
+  } else if (key === 'event') {
+    config.defaults.event = value
+  } else if (key === 'partnership') {
+    config.defaults.partnership = value
+  } else {
+    throw new Error(`Unknown config key: ${key}. Valid keys: event, partnership, test`)
+  }
+  writeConfig(config)
+}
+
+export function clearDefaults(): void {
+  const config = readConfig()
+  config.defaults = {}
+  writeConfig(config)
+}
+
+export function removeDefault(key: string): void {
+  const config = readConfig()
+  if (key === 'test') {
+    delete config.defaults.test
+  } else if (key === 'event') {
+    delete config.defaults.event
+  } else if (key === 'partnership') {
+    delete config.defaults.partnership
+  }
+  writeConfig(config)
+}
+
+// --- Environment helpers ---
 
 export function getBaseUrl(isTest: boolean): string {
   if (isTest) return 'http://phq.test'

@@ -1,7 +1,8 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse } from '../api-client'
-import { printList, printObject, printSuccess } from '../output'
+import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
+import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
+import { confirmOrExit } from '../prompt'
 
 const LIST_COLS = ['id', 'label', 'go_to_link', 'pinned', 'locked', 'published_at', 'created_at']
 
@@ -19,13 +20,13 @@ export function registerResourcesCommands(program: Command): void {
     .option('--sort <predicate>', 'Sort column (e.g. position asc)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
-      const response = await client.get(
-        `/api/v1/e/${event}/p/${partnership}/resources`,
-        { params: { q, page: opts.page, per_page: opts.perPage } }
+      const response = await withSpinner('Fetching resources...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/resources`, { params: { q, page: opts.page, per_page: opts.perPage } })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -35,9 +36,12 @@ export function registerResourcesCommands(program: Command): void {
     .description('Get a single resource by ID')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/e/${event}/p/${partnership}/resources/${id}`)
+      const response = await withSpinner('Fetching resource...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/resources/${id}`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -52,6 +56,7 @@ export function registerResourcesCommands(program: Command): void {
     .option('--locked', 'Lock this resource')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = { label: opts.label }
@@ -60,7 +65,9 @@ export function registerResourcesCommands(program: Command): void {
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
       if (opts.pinned) body.pinned = true
       if (opts.locked) body.locked = true
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/resources`, { resource: body })
+      const response = await withSpinner('Creating resource...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/resources`, { resource: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -75,6 +82,7 @@ export function registerResourcesCommands(program: Command): void {
     .option('--locked <bool>', 'Locked (true/false)')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {}
@@ -84,7 +92,9 @@ export function registerResourcesCommands(program: Command): void {
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
       if (opts.pinned !== undefined) body.pinned = opts.pinned === 'true'
       if (opts.locked !== undefined) body.locked = opts.locked === 'true'
-      const response = await client.patch(`/api/v1/e/${event}/p/${partnership}/resources/${id}`, { resource: body })
+      const response = await withSpinner('Updating resource...', () =>
+        client.patch(`/api/v1/e/${event}/p/${partnership}/resources/${id}`, { resource: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -93,9 +103,13 @@ export function registerResourcesCommands(program: Command): void {
     .description('Delete (soft-delete) a resource')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Delete resource ${id}?`)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      await client.delete(`/api/v1/e/${event}/p/${partnership}/resources/${id}`)
+      await withSpinner('Deleting resource...', () =>
+        client.delete(`/api/v1/e/${event}/p/${partnership}/resources/${id}`)
+      )
       printSuccess(`Resource ${id} deleted.`)
     })
 }

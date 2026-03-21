@@ -1,7 +1,8 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse } from '../api-client'
-import { printList, printObject, printSuccess } from '../output'
+import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
+import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
+import { confirmOrExit } from '../prompt'
 
 const LIST_COLS = ['id', 'first_name', 'last_name', 'email', 'host', 'read_only', 'created_at']
 
@@ -19,13 +20,13 @@ export function registerPartnershipsCommands(program: Command): void {
     .option('--sort <predicate>', 'Sort column (e.g. created_at desc)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
-      const response = await client.get(
-        `/api/v1/e/${event}/p/${partnership}/partnerships`,
-        { params: { q, page: opts.page, per_page: opts.perPage } }
+      const response = await withSpinner('Fetching partnerships...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/partnerships`, { params: { q, page: opts.page, per_page: opts.perPage } })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -35,9 +36,12 @@ export function registerPartnershipsCommands(program: Command): void {
     .description('Get a single partnership by ID')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/e/${event}/p/${partnership}/partnerships/${id}`)
+      const response = await withSpinner('Fetching partnership...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/partnerships/${id}`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -52,6 +56,7 @@ export function registerPartnershipsCommands(program: Command): void {
     .option('--notes <notes>', 'Internal notes')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {
@@ -62,7 +67,9 @@ export function registerPartnershipsCommands(program: Command): void {
       if (opts.host) body.host = true
       if (opts.readOnly) body.read_only = true
       if (opts.notes) body.notes = opts.notes
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/partnerships`, { partnership: body })
+      const response = await withSpinner('Creating partnership...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/partnerships`, { partnership: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -77,6 +84,7 @@ export function registerPartnershipsCommands(program: Command): void {
     .option('--notes <notes>', 'Internal notes')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {}
@@ -86,7 +94,9 @@ export function registerPartnershipsCommands(program: Command): void {
       if (opts.host !== undefined) body.host = opts.host === 'true'
       if (opts.readOnly !== undefined) body.read_only = opts.readOnly === 'true'
       if (opts.notes) body.notes = opts.notes
-      const response = await client.patch(`/api/v1/e/${event}/p/${partnership}/partnerships/${id}`, { partnership: body })
+      const response = await withSpinner('Updating partnership...', () =>
+        client.patch(`/api/v1/e/${event}/p/${partnership}/partnerships/${id}`, { partnership: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -95,9 +105,13 @@ export function registerPartnershipsCommands(program: Command): void {
     .description('Delete a partnership')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Delete partnership ${id}?`)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      await client.delete(`/api/v1/e/${event}/p/${partnership}/partnerships/${id}`)
+      await withSpinner('Deleting partnership...', () =>
+        client.delete(`/api/v1/e/${event}/p/${partnership}/partnerships/${id}`)
+      )
       printSuccess(`Partnership ${id} deleted.`)
     })
 
@@ -109,10 +123,13 @@ export function registerPartnershipsCommands(program: Command): void {
     .requiredOption('--email <email>', 'Email address')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body = { first_name: opts.firstName, last_name: opts.lastName, email: opts.email }
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/partnerships/retrieve`, { partnership: body })
+      const response = await withSpinner('Retrieving partnership...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/partnerships/retrieve`, { partnership: body })
+      )
       printObject(response.data, { json: g.json })
     })
 }

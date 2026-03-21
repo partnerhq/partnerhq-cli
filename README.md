@@ -9,12 +9,16 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
 ## Table of Contents
 
 - [Installation](#installation)
+- [Quick Start](#quick-start)
 - [Authentication](#authentication)
+- [Persistent Configuration](#persistent-configuration)
 - [Environment Variables](#environment-variables)
 - [Test Mode](#test-mode)
 - [Global Options](#global-options)
 - [Commands](#commands)
   - [auth](#auth)
+  - [config](#config)
+  - [whoami](#whoami)
   - [my-events](#my-events)
   - [events](#events)
   - [partnerships](#partnerships)
@@ -79,11 +83,37 @@ partnerhq --version
 
 ---
 
+## Quick Start
+
+```bash
+# 1. Log in (interactive — prompts for email and password)
+phq auth login
+
+# 2. Save your default event and partnership so you don't have to type them every time
+phq config set event acme-summit-2025
+phq config set partnership 42
+
+# 3. Start using the CLI
+phq tasks list
+phq partnerships list --filter "host_eq=true"
+phq whoami
+```
+
+---
+
 ## Authentication
 
-All API requests require an OAuth 2.0 Bearer token. Use the `auth login` command to obtain and store one.
+All API requests require an OAuth 2.0 Bearer token. Use `auth login` to obtain and store one.
 
-### Log in
+### Interactive login (recommended)
+
+```bash
+phq auth login
+```
+
+You will be prompted for your email and password one at a time. The password is masked with `*` characters and never appears in your shell history.
+
+### Non-interactive login (CI/CD)
 
 ```bash
 phq auth login --email you@example.com --password yourpassword
@@ -101,8 +131,56 @@ This revokes the token on the server and removes it from the local config.
 
 ### Check status
 
+Shows authentication status for **both** environments at once:
+
 ```bash
 phq auth status
+```
+
+```
+┌────────────┬─────────────────┬───────────────────────────┬──────────────────┐
+│ production │ ✓ Authenticated │ https://app.partnerhq.com │ abc12345...xyz9  │
+├────────────┼─────────────────┼───────────────────────────┼──────────────────┤
+│ test       │ ✗ Not logged in │ http://phq.test           │ —                │
+└────────────┴─────────────────┴───────────────────────────┴──────────────────┘
+
+  Active: production
+```
+
+---
+
+## Persistent Configuration
+
+Save defaults so you don't have to pass `--event`, `--partnership`, or `--test` on every command.
+
+```bash
+# Save your working event and partnership
+phq config set event acme-summit-2025
+phq config set partnership 42
+
+# Enable persistent test mode
+phq config set test true
+
+# Now these are equivalent:
+phq tasks list
+phq tasks list --event acme-summit-2025 --partnership 42 --test
+
+# View all saved defaults
+phq config list
+
+# Remove a single default
+phq config unset event
+
+# Clear all defaults (tokens are preserved)
+phq config clear
+```
+
+The priority chain for all options is: **CLI flag > environment variable > saved config default**.
+
+See your full resolved context at any time:
+
+```bash
+phq whoami
 ```
 
 ---
@@ -114,8 +192,8 @@ These variables override saved config values. Useful in CI/CD pipelines.
 | Variable          | Description                                                  |
 |-------------------|--------------------------------------------------------------|
 | `PHQ_API_KEY`     | OAuth Bearer token (overrides saved token)                   |
-| `PHQ_EVENT`       | Default event permalink (used when `--event` is not passed)  |
-| `PHQ_PARTNERSHIP` | Default partnership ID (used when `--partnership` is not passed) |
+| `PHQ_EVENT`       | Default event permalink (overrides saved config)             |
+| `PHQ_PARTNERSHIP` | Default partnership ID (overrides saved config)              |
 | `PHQ_TEST`        | Set to `1` or `true` to enable test mode                     |
 
 **Example — CI pipeline:**
@@ -132,19 +210,26 @@ phq tasks list --filter "status_filter=published"
 
 ## Test Mode
 
-Pass `--test` to any command (or set `PHQ_TEST=1`) to point the CLI at your local development environment (`http://phq.test`) instead of production (`https://app.partnerhq.com`).
-
-Test mode uses a **separate token** stored in `~/.partnerhq/config.json` under the `test` key, so your production credentials are never overwritten.
+Point the CLI at your local development environment (`http://phq.test`) instead of production (`https://app.partnerhq.com`). There are three ways to enable it:
 
 ```bash
-# Log in to local dev
-phq auth login --email dev@example.com --password devpassword --test
+# 1. Per-command flag
+phq tasks list --test
 
-# Use local dev for any command
-phq tasks list --event my-event --partnership 1 --test
+# 2. Environment variable
+PHQ_TEST=1 phq tasks list
 
-# Via env var (useful in scripts)
-PHQ_TEST=1 phq tasks list --event my-event --partnership 1
+# 3. Persistent (stays on until you turn it off)
+phq config set test true
+```
+
+When test mode is active, a yellow **TEST MODE** banner is displayed before any output so you always know where your commands are going.
+
+Test mode uses a **separate token** stored in `~/.partnerhq/config.json`, so your production credentials are never overwritten. Log in to each environment independently:
+
+```bash
+phq auth login              # logs in to production
+phq auth login --test       # logs in to local dev
 ```
 
 **Config file structure:**
@@ -152,7 +237,8 @@ PHQ_TEST=1 phq tasks list --event my-event --partnership 1
 ```json
 {
   "production": { "token": "prod_token_here" },
-  "test":       { "token": "test_token_here" }
+  "test":       { "token": "test_token_here" },
+  "defaults":   { "event": "acme-summit-2025", "partnership": "42", "test": false }
 }
 ```
 
@@ -166,14 +252,17 @@ These options are available on every command:
 |--------------------------|----------------------------------------------------------|
 | `--test`                 | Use local dev environment (`http://phq.test`)            |
 | `--json`                 | Output raw JSON instead of a formatted table             |
-| `--event <permalink>`    | Event permalink (overrides `PHQ_EVENT`)                  |
-| `--partnership <id>`     | Your partnership ID (overrides `PHQ_PARTNERSHIP`)        |
+| `--event <permalink>`    | Event permalink (overrides `PHQ_EVENT` and saved config) |
+| `--partnership <id>`     | Partnership ID (overrides `PHQ_PARTNERSHIP` and saved config) |
+| `-y, --yes`              | Skip confirmation prompts (for scripting)                |
 
 ---
 
 ## Commands
 
-Most resource commands require an event permalink and a partnership ID. Supply them via `--event`/`--partnership` flags or the `PHQ_EVENT`/`PHQ_PARTNERSHIP` environment variables.
+Most resource commands require an event permalink and a partnership ID. These can be supplied via `--event`/`--partnership` flags, `PHQ_EVENT`/`PHQ_PARTNERSHIP` environment variables, or saved via `phq config set`.
+
+Destructive commands (`delete`) will ask for confirmation before proceeding. Pass `--yes` or `-y` to skip the prompt.
 
 ---
 
@@ -182,9 +271,60 @@ Most resource commands require an event permalink and a partnership ID. Supply t
 Manage authentication.
 
 ```bash
+# Interactive login (prompts for email and password)
+phq auth login [--test]
+
+# Non-interactive login (for CI/CD)
 phq auth login --email <email> --password <password> [--test]
+
 phq auth logout [--test]
-phq auth status [--test]
+phq auth status
+```
+
+---
+
+### config
+
+Manage persistent CLI defaults.
+
+```bash
+phq config set <key> <value>   # Set a default (keys: event, partnership, test)
+phq config get <key>           # Get the current value of a default
+phq config unset <key>         # Remove a single default
+phq config list                # Show all saved defaults
+phq config clear               # Remove all defaults (keeps tokens)
+```
+
+**Examples:**
+
+```bash
+phq config set event acme-summit-2025
+phq config set partnership 42
+phq config set test true
+phq config list
+phq config unset test
+```
+
+---
+
+### whoami
+
+Show your full current CLI context at a glance.
+
+```bash
+phq whoami [--json]
+```
+
+```
+┌───────────────┬────────────────────────────────────────┐
+│ Environment   │ production (https://app.partnerhq.com) │
+├───────────────┼────────────────────────────────────────┤
+│ Authenticated │ ✓ abc12345...xyz9                      │
+├───────────────┼────────────────────────────────────────┤
+│ Event         │ acme-summit-2025                       │
+├───────────────┼────────────────────────────────────────┤
+│ Partnership   │ 42                                     │
+└───────────────┴────────────────────────────────────────┘
 ```
 
 ---
@@ -213,8 +353,11 @@ phq events create --name "Acme Summit 2025" [--welcome-message "Welcome!"] [--br
 # Update an event
 phq events update <permalink> [--name "New Name"] [--welcome-message "..."] [--brand-color "#000000"]
 
-# Delete an event
+# Delete an event (will ask for confirmation)
 phq events delete <permalink>
+
+# Skip confirmation (scripting)
+phq events delete <permalink> --yes
 ```
 
 ---

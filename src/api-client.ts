@@ -1,4 +1,6 @@
-import axios, { AxiosInstance, AxiosError } from 'axios'
+import axios, { AxiosInstance, AxiosError, AxiosResponse } from 'axios'
+import ora from 'ora'
+import chalk from 'chalk'
 import { getToken, getBaseUrl, resolveEnvironment } from './config'
 
 export interface PaginatedResponse<T> {
@@ -18,10 +20,10 @@ export function createClient(opts: ApiOptions): AxiosInstance {
   const baseURL = getBaseUrl(opts.test)
 
   if (!token) {
-    const envFlag = opts.test ? ' --test' : ''
-    console.error(
-      `Error: Not authenticated. Run 'phq auth login --email <email> --password <password>${envFlag}' first.`
-    )
+    const loginCmd = opts.test
+      ? chalk.cyan("'phq auth login --test'")
+      : chalk.cyan("'phq auth login'")
+    console.error(chalk.red('✗') + ` Not authenticated. Run ${loginCmd} first.`)
     process.exit(1)
   }
 
@@ -42,28 +44,36 @@ export function createClient(opts: ApiOptions): AxiosInstance {
         const data = error.response.data as Record<string, unknown>
 
         if (status === 401) {
-          console.error('Error: Unauthorized. Your token may be invalid or expired. Please log in again.')
+          const loginCmd = opts.test ? "'phq auth login --test'" : "'phq auth login'"
+          console.error(chalk.red('✗') + ` Unauthorized. Run ${chalk.cyan(loginCmd)} to re-authenticate.`)
           process.exit(1)
         }
 
         if (status === 404) {
-          console.error('Error: Resource not found.')
+          console.error(chalk.red('✗') + ' Resource not found.')
           process.exit(1)
         }
 
         if (status === 400) {
           const errors = data?.errors ?? data?.error ?? data
-          console.error('Error:', JSON.stringify(errors, null, 2))
+          console.error(chalk.red('✗') + ' Bad request:', JSON.stringify(errors, null, 2))
           process.exit(1)
         }
 
         if (status === 500) {
           const errors = data?.errors ?? data?.error ?? 'Internal server error'
-          console.error('Error:', JSON.stringify(errors, null, 2))
+          console.error(chalk.red('✗') + ' Server error:', JSON.stringify(errors, null, 2))
           process.exit(1)
         }
       } else if (error.request) {
-        console.error('Error: No response received from server. Check your network connection.')
+        if (opts.test && (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND')) {
+          console.error(
+            chalk.red('✗') +
+            ` Could not connect to ${chalk.bold('http://phq.test')}. Is your local server running?`
+          )
+        } else {
+          console.error(chalk.red('✗') + ' No response received from server. Check your network connection.')
+        }
         process.exit(1)
       }
       return Promise.reject(error)
@@ -73,9 +83,6 @@ export function createClient(opts: ApiOptions): AxiosInstance {
   return client
 }
 
-/**
- * Creates an unauthenticated client — used only for auth login/logout.
- */
 export function createUnauthenticatedClient(opts: ApiOptions): AxiosInstance {
   const baseURL = getBaseUrl(opts.test)
   return axios.create({
@@ -88,15 +95,31 @@ export function createUnauthenticatedClient(opts: ApiOptions): AxiosInstance {
 }
 
 /**
- * Converts an array of --filter "key=value" strings into a ransack `q` params object.
- * Example: ["label_cont=signup", "pinned_eq=true"] → { label_cont: "signup", pinned_eq: "true" }
+ * Wrap an async API call with a loading spinner.
+ * The spinner shows `message` while loading, a checkmark on success,
+ * and stops silently on failure (the error interceptor handles output).
  */
+export async function withSpinner<T>(
+  message: string,
+  fn: () => Promise<AxiosResponse<T>>
+): Promise<AxiosResponse<T>> {
+  const spinner = ora(message).start()
+  try {
+    const result = await fn()
+    spinner.succeed()
+    return result
+  } catch (err) {
+    spinner.stop()
+    throw err
+  }
+}
+
 export function buildFilterParams(filters: string[]): Record<string, string> {
   const q: Record<string, string> = {}
   for (const f of filters) {
     const idx = f.indexOf('=')
     if (idx === -1) {
-      console.error(`Error: Invalid filter "${f}". Filters must be in the format "predicate=value".`)
+      console.error(chalk.red('✗') + ` Invalid filter "${f}". Filters must be in the format "predicate=value".`)
       process.exit(1)
     }
     const key = f.slice(0, idx).trim()

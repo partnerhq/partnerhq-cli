@@ -1,7 +1,8 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse } from '../api-client'
-import { printList, printObject, printSuccess } from '../output'
+import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
+import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
+import { confirmOrExit } from '../prompt'
 
 const LIST_COLS = ['id', 'text', 'segment', 'scheduled_at', 'published_at', 'created_at']
 
@@ -19,13 +20,13 @@ export function registerAnnouncementsCommands(program: Command): void {
     .option('--sort <predicate>', 'Sort column (e.g. created_at desc)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
-      const response = await client.get(
-        `/api/v1/e/${event}/p/${partnership}/announcements`,
-        { params: { q, page: opts.page, per_page: opts.perPage } }
+      const response = await withSpinner('Fetching announcements...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/announcements`, { params: { q, page: opts.page, per_page: opts.perPage } })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -35,9 +36,12 @@ export function registerAnnouncementsCommands(program: Command): void {
     .description('Get a single announcement by ID')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/e/${event}/p/${partnership}/announcements/${id}`)
+      const response = await withSpinner('Fetching announcement...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/announcements/${id}`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -50,6 +54,7 @@ export function registerAnnouncementsCommands(program: Command): void {
     .option('--notify <type>', 'Notify type: all, task, tag, organization_partnership (default: all)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {
@@ -59,7 +64,9 @@ export function registerAnnouncementsCommands(program: Command): void {
       if (opts.segment) body.segment = opts.segment
       if (opts.scheduledAt) body.scheduled_at = opts.scheduledAt
       if (opts.notify) body.notify = opts.notify
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/announcements`, { announcement: body })
+      const response = await withSpinner('Creating announcement...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/announcements`, { announcement: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -71,13 +78,16 @@ export function registerAnnouncementsCommands(program: Command): void {
     .option('--scheduled-at <datetime>', 'New scheduled time (ISO 8601)')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {}
       if (opts.text) body.text = opts.text
       if (opts.segment) body.segment = opts.segment
       if (opts.scheduledAt) body.scheduled_at = opts.scheduledAt
-      const response = await client.patch(`/api/v1/e/${event}/p/${partnership}/announcements/${id}`, { announcement: body })
+      const response = await withSpinner('Updating announcement...', () =>
+        client.patch(`/api/v1/e/${event}/p/${partnership}/announcements/${id}`, { announcement: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -86,9 +96,13 @@ export function registerAnnouncementsCommands(program: Command): void {
     .description('Delete an announcement')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Delete announcement ${id}?`)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      await client.delete(`/api/v1/e/${event}/p/${partnership}/announcements/${id}`)
+      await withSpinner('Deleting announcement...', () =>
+        client.delete(`/api/v1/e/${event}/p/${partnership}/announcements/${id}`)
+      )
       printSuccess(`Announcement ${id} deleted.`)
     })
 }

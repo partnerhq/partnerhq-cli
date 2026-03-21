@@ -1,7 +1,8 @@
 import { Command } from 'commander'
-import { createClient } from '../api-client'
-import { printObject, printSuccess } from '../output'
+import { createClient, withSpinner } from '../api-client'
+import { printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts } from '../global-opts'
+import { confirmOrExit } from '../prompt'
 
 export function registerEventsCommands(program: Command): void {
   const events = program
@@ -13,8 +14,11 @@ export function registerEventsCommands(program: Command): void {
     .description('Get details for an event by its permalink')
     .action(async (permalink, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/events/${permalink}`)
+      const response = await withSpinner('Fetching event...', () =>
+        client.get(`/api/v1/events/${permalink}`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -26,12 +30,15 @@ export function registerEventsCommands(program: Command): void {
     .option('--brand-color <hex>', 'Brand color hex (e.g. #FF0000)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const client = createClient({ test: g.test })
       const body: Record<string, string> = { name: opts.name }
       if (opts.welcomeMessage) body.welcome_message = opts.welcomeMessage
       if (opts.brandColor) body.brand_color_hex = opts.brandColor
 
-      const response = await client.post('/api/v1/events', { event: body })
+      const response = await withSpinner('Creating event...', () =>
+        client.post('/api/v1/events', { event: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -43,13 +50,16 @@ export function registerEventsCommands(program: Command): void {
     .option('--brand-color <hex>', 'New brand color hex')
     .action(async (permalink, opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const client = createClient({ test: g.test })
       const body: Record<string, string> = {}
       if (opts.name) body.name = opts.name
       if (opts.welcomeMessage) body.welcome_message = opts.welcomeMessage
       if (opts.brandColor) body.brand_color_hex = opts.brandColor
 
-      const response = await client.patch(`/api/v1/events/${permalink}`, { event: body })
+      const response = await withSpinner('Updating event...', () =>
+        client.patch(`/api/v1/events/${permalink}`, { event: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -58,8 +68,12 @@ export function registerEventsCommands(program: Command): void {
     .description('Delete an event')
     .action(async (permalink, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Delete event '${permalink}'?`)
       const client = createClient({ test: g.test })
-      await client.delete(`/api/v1/events/${permalink}`)
+      await withSpinner('Deleting event...', () =>
+        client.delete(`/api/v1/events/${permalink}`)
+      )
       printSuccess(`Event '${permalink}' deleted.`)
     })
 }

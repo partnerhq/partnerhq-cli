@@ -1,7 +1,8 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse } from '../api-client'
-import { printList, printObject, printSuccess } from '../output'
+import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
+import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
+import { confirmOrExit } from '../prompt'
 
 const LIST_COLS = ['id', 'label', 'pinned', 'locked', 'due_at', 'published_at', 'created_at']
 
@@ -19,13 +20,13 @@ export function registerInternalTasksCommands(program: Command): void {
     .option('--sort <predicate>', 'Sort column (e.g. position asc)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
-      const response = await client.get(
-        `/api/v1/e/${event}/p/${partnership}/internal_tasks`,
-        { params: { q, page: opts.page, per_page: opts.perPage } }
+      const response = await withSpinner('Fetching internal tasks...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/internal_tasks`, { params: { q, page: opts.page, per_page: opts.perPage } })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -35,9 +36,12 @@ export function registerInternalTasksCommands(program: Command): void {
     .description('Get a single internal task by ID')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`)
+      const response = await withSpinner('Fetching internal task...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -51,6 +55,7 @@ export function registerInternalTasksCommands(program: Command): void {
     .option('--locked', 'Lock this task')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = { label: opts.label }
@@ -58,7 +63,9 @@ export function registerInternalTasksCommands(program: Command): void {
       if (opts.dueAt) body.due_at = opts.dueAt
       if (opts.pinned) body.pinned = true
       if (opts.locked) body.locked = true
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/internal_tasks`, { internal_task: body })
+      const response = await withSpinner('Creating internal task...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/internal_tasks`, { internal_task: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -72,6 +79,7 @@ export function registerInternalTasksCommands(program: Command): void {
     .option('--locked <bool>', 'Locked (true/false)')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {}
@@ -80,7 +88,9 @@ export function registerInternalTasksCommands(program: Command): void {
       if (opts.dueAt) body.due_at = opts.dueAt
       if (opts.pinned !== undefined) body.pinned = opts.pinned === 'true'
       if (opts.locked !== undefined) body.locked = opts.locked === 'true'
-      const response = await client.patch(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`, { internal_task: body })
+      const response = await withSpinner('Updating internal task...', () =>
+        client.patch(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`, { internal_task: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -89,9 +99,13 @@ export function registerInternalTasksCommands(program: Command): void {
     .description('Delete (soft-delete) an internal task')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Delete internal task ${id}?`)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      await client.delete(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`)
+      await withSpinner('Deleting internal task...', () =>
+        client.delete(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`)
+      )
       printSuccess(`Internal task ${id} deleted.`)
     })
 }

@@ -1,6 +1,6 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse } from '../api-client'
-import { printList, printObject } from '../output'
+import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
+import { printList, printObject, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 
 const LIST_COLS = ['id', 'task_id', 'partnerable_type', 'partnerable_id', 'enabled', 'completed_at', 'due_at', 'created_at']
@@ -19,13 +19,13 @@ export function registerTaskCompletionsCommands(program: Command): void {
     .option('--sort <predicate>', 'Sort column (e.g. due_at asc)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
-      const response = await client.get(
-        `/api/v1/e/${event}/p/${partnership}/task_completions`,
-        { params: { q, page: opts.page, per_page: opts.perPage } }
+      const response = await withSpinner('Fetching task completions...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/task_completions`, { params: { q, page: opts.page, per_page: opts.perPage } })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -35,9 +35,12 @@ export function registerTaskCompletionsCommands(program: Command): void {
     .description('Get a single task completion by ID')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}`)
+      const response = await withSpinner('Fetching task completion...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -49,13 +52,16 @@ export function registerTaskCompletionsCommands(program: Command): void {
     .option('--assigned-partnership-id <id>', 'Assign to a specific partnership')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {}
       if (opts.enabled !== undefined) body.enabled = opts.enabled === 'true'
       if (opts.dueAt) body.due_at = opts.dueAt
       if (opts.assignedPartnershipId) body.assigned_partnership_id = opts.assignedPartnershipId
-      const response = await client.patch(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}`, { task_completion: body })
+      const response = await withSpinner('Updating task completion...', () =>
+        client.patch(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}`, { task_completion: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -64,9 +70,12 @@ export function registerTaskCompletionsCommands(program: Command): void {
     .description('Mark a task completion as complete')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}/complete`)
+      const response = await withSpinner('Completing task...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}/complete`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -75,9 +84,12 @@ export function registerTaskCompletionsCommands(program: Command): void {
     .description('Reset a task completion back to incomplete')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}/reset`)
+      const response = await withSpinner('Resetting task completion...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}/reset`)
+      )
       printObject(response.data, { json: g.json })
     })
 }

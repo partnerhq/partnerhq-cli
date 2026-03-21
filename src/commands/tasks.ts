@@ -1,7 +1,8 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse } from '../api-client'
-import { printList, printObject, printSuccess } from '../output'
+import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
+import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
+import { confirmOrExit } from '../prompt'
 
 const LIST_COLS = ['id', 'label', 'type', 'pinned', 'locked', 'advance', 'due_at', 'published_at', 'created_at']
 
@@ -19,13 +20,13 @@ export function registerTasksCommands(program: Command): void {
     .option('--sort <predicate>', 'Sort column (e.g. position asc)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
-      const response = await client.get(
-        `/api/v1/e/${event}/p/${partnership}/tasks`,
-        { params: { q, page: opts.page, per_page: opts.perPage } }
+      const response = await withSpinner('Fetching tasks...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/tasks`, { params: { q, page: opts.page, per_page: opts.perPage } })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -35,9 +36,12 @@ export function registerTasksCommands(program: Command): void {
     .description('Get a single task by ID')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const response = await client.get(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`)
+      const response = await withSpinner('Fetching task...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`)
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -55,6 +59,7 @@ export function registerTasksCommands(program: Command): void {
     .option('--go-to-link-instructions <text>', 'Instructions for the go-to link')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = { label: opts.label }
@@ -66,7 +71,9 @@ export function registerTasksCommands(program: Command): void {
       if (opts.notifyHosts) body.notify_hosts_on_completion = true
       if (opts.goToLink) body.go_to_link = opts.goToLink
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
-      const response = await client.post(`/api/v1/e/${event}/p/${partnership}/tasks`, { task: body })
+      const response = await withSpinner('Creating task...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/tasks`, { task: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -84,6 +91,7 @@ export function registerTasksCommands(program: Command): void {
     .option('--go-to-link-instructions <text>', 'Instructions for the go-to link')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const body: Record<string, unknown> = {}
@@ -96,7 +104,9 @@ export function registerTasksCommands(program: Command): void {
       if (opts.notifyHosts !== undefined) body.notify_hosts_on_completion = opts.notifyHosts === 'true'
       if (opts.goToLink) body.go_to_link = opts.goToLink
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
-      const response = await client.patch(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`, { task: body })
+      const response = await withSpinner('Updating task...', () =>
+        client.patch(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`, { task: body })
+      )
       printObject(response.data, { json: g.json })
     })
 
@@ -105,9 +115,13 @@ export function registerTasksCommands(program: Command): void {
     .description('Delete (soft-delete) a task')
     .action(async (id, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Delete task ${id}?`)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      await client.delete(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`)
+      await withSpinner('Deleting task...', () =>
+        client.delete(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`)
+      )
       printSuccess(`Task ${id} deleted.`)
     })
 }

@@ -6,6 +6,18 @@ export interface PrintOptions {
   json: boolean
 }
 
+let bannerShown = false
+
+/**
+ * Print a warning banner when running in test mode.
+ * Only prints once per CLI invocation and never in JSON mode.
+ */
+export function printBanner(test: boolean, json: boolean): void {
+  if (json || bannerShown || !test) return
+  bannerShown = true
+  console.log(chalk.bgYellow.black(' ⚠ TEST MODE ') + chalk.yellow(' http://phq.test') + '\n')
+}
+
 /**
  * Print a single object — JSON mode or a two-column key/value table.
  */
