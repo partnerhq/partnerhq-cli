@@ -3,7 +3,7 @@ import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from 
 import { printList, printObject, printBanner } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
 
-const LIST_COLS = ['id', 'task_id', 'enabled', 'completed_at', 'due_at', 'assigned_partnership_id', 'created_at']
+const LIST_COLS = ['id', 'label', 'task_id', 'enabled', 'completed_at', 'due_at', 'overdue', 'created_at']
 
 export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
   const tcCmd = cmd
