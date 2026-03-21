@@ -111,12 +111,19 @@ All API requests require an OAuth 2.0 Bearer token. Use `auth login` to obtain a
 phq auth login
 ```
 
-You will be prompted for your email and password one at a time. The password is masked with `*` characters and never appears in your shell history.
+You will be prompted for each credential one at a time:
+
+1. **Client ID** -- your OAuth application's client ID
+2. **Client Secret** -- your OAuth application's client secret (masked)
+3. **Email** -- your PartnerHQ account email
+4. **Password** -- your account password (masked)
+
+The client ID and secret are saved per-environment in `~/.partnerhq/config.json`, so on subsequent logins you'll only be prompted for your email and password.
 
 ### Non-interactive login (CI/CD)
 
 ```bash
-phq auth login --email you@example.com --password yourpassword
+phq auth login --client-id <id> --client-secret <secret> --email you@example.com --password yourpassword
 ```
 
 Your token is saved to `~/.partnerhq/config.json` and used automatically for all subsequent commands.
@@ -236,8 +243,8 @@ phq auth login --test       # logs in to local dev
 
 ```json
 {
-  "production": { "token": "prod_token_here" },
-  "test":       { "token": "test_token_here" },
+  "production": { "token": "...", "client_id": "...", "client_secret": "..." },
+  "test":       { "token": "...", "client_id": "...", "client_secret": "..." },
   "defaults":   { "event": "acme-summit-2025", "partnership": "42", "test": false }
 }
 ```
@@ -271,11 +278,11 @@ Destructive commands (`delete`) will ask for confirmation before proceeding. Pas
 Manage authentication.
 
 ```bash
-# Interactive login (prompts for email and password)
+# Interactive login (prompts for client ID, secret, email, password)
 phq auth login [--test]
 
 # Non-interactive login (for CI/CD)
-phq auth login --email <email> --password <password> [--test]
+phq auth login --client-id <id> --client-secret <secret> --email <email> --password <password> [--test]
 
 phq auth logout [--test]
 phq auth status

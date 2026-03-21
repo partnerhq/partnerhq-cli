@@ -9,6 +9,8 @@ export type Environment = 'production' | 'test'
 
 interface EnvironmentConfig {
   token?: string
+  client_id?: string
+  client_secret?: string
 }
 
 interface Defaults {
@@ -62,9 +64,22 @@ export function getToken(env: Environment): string | undefined {
   return config[env]?.token
 }
 
-export function setToken(env: Environment, token: string): void {
+export function getClientCredentials(env: Environment): { clientId?: string; clientSecret?: string } {
   const config = readConfig()
-  config[env] = { ...config[env], token }
+  return {
+    clientId: config[env]?.client_id,
+    clientSecret: config[env]?.client_secret,
+  }
+}
+
+export function setCredentials(env: Environment, creds: { token: string; clientId: string; clientSecret: string }): void {
+  const config = readConfig()
+  config[env] = {
+    ...config[env],
+    token: creds.token,
+    client_id: creds.clientId,
+    client_secret: creds.clientSecret,
+  }
   writeConfig(config)
 }
 

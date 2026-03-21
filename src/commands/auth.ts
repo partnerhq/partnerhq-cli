@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import Table from 'cli-table3'
 import ora from 'ora'
 import { createUnauthenticatedClient } from '../api-client'
-import { setToken, clearToken, resolveEnvironment, getToken, getBaseUrl, getDefaults } from '../config'
+import { setCredentials, clearToken, resolveEnvironment, getToken, getBaseUrl, getDefaults, getClientCredentials } from '../config'
 import { printSuccess, printError, printBanner } from '../output'
 import { promptInput, promptPassword } from '../prompt'
 
@@ -26,10 +26,22 @@ export function registerAuthCommands(program: Command): void {
     .description('Log in and store an OAuth token')
     .option('--email <email>', 'Your PartnerHQ account email')
     .option('--password <password>', 'Your PartnerHQ account password')
+    .option('--client-id <id>', 'OAuth application client ID')
+    .option('--client-secret <secret>', 'OAuth application client secret')
     .action(async (opts, cmd) => {
       const test = isTestMode(cmd)
       const env = resolveEnvironment(test)
       printBanner(test, false)
+
+      const saved = getClientCredentials(env)
+
+      const clientId = opts.clientId ?? saved.clientId ?? await promptInput('Client ID:')
+      const clientSecret = opts.clientSecret ?? saved.clientSecret ?? await promptPassword('Client Secret:')
+
+      if (!clientId || !clientSecret) {
+        printError('Client ID and Client Secret are required.')
+        process.exit(1)
+      }
 
       const email = opts.email ?? await promptInput('Email:')
       const password = opts.password ?? await promptPassword('Password:')
@@ -45,6 +57,8 @@ export function registerAuthCommands(program: Command): void {
       try {
         const response = await client.post('/oauth/token', {
           grant_type: 'password',
+          client_id: clientId,
+          client_secret: clientSecret,
           email,
           password,
         })
@@ -55,7 +69,7 @@ export function registerAuthCommands(program: Command): void {
           process.exit(1)
         }
 
-        setToken(env, token)
+        setCredentials(env, { token, clientId, clientSecret })
         spinner.succeed(
           `Logged in as ${chalk.bold(email)} (${chalk.cyan(env)})`
         )
