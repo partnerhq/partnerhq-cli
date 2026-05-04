@@ -21,6 +21,7 @@ import { registerPartnerProfileCommands } from './commands/partner/profile'
 import { registerPartnerOrgPartnershipsCommands } from './commands/partner/org-partnerships'
 import { registerPartnerTaskCompletionsCommands } from './commands/partner/task-completions'
 import { registerPartnerChatCommands } from './commands/partner/chat'
+import { registerPartnerInvitationsCommands } from './commands/partner/invitations'
 
 const program = new Command()
 
@@ -65,6 +66,7 @@ registerPartnerProfileCommands(partnerCmd)
 registerPartnerOrgPartnershipsCommands(partnerCmd)
 registerPartnerTaskCompletionsCommands(partnerCmd)
 registerPartnerChatCommands(partnerCmd)
+registerPartnerInvitationsCommands(partnerCmd)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err)
