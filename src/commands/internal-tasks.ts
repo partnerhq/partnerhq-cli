@@ -3,6 +3,22 @@ import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from 
 import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 import { confirmOrExit } from '../prompt'
+import { parseDataFlag, deepMerge } from '../data-flag'
+
+function parseIdList(value: string): number[] {
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => {
+      const n = Number(s)
+      if (!Number.isInteger(n)) {
+        console.error(`✗ Invalid id "${s}" in list — expected an integer.`)
+        process.exit(1)
+      }
+      return n
+    })
+}
 
 const LIST_COLS = ['id', 'label', 'pinned', 'locked', 'due_at', 'published_at', 'created_at']
 
@@ -53,6 +69,11 @@ export function registerInternalTasksCommands(program: Command): void {
     .option('--due-at <datetime>', 'Due date (ISO 8601)')
     .option('--pinned', 'Pin this task')
     .option('--locked', 'Lock this task')
+    .option('--auto-assign-to-partnership-id <id>', 'Host team-member partnership ID to auto-assign')
+    .option('--assign-now-to-partnership-id <id>', 'Host team-member partnership ID to assign immediately')
+    .option('--task-ids <id,id,...>', 'Comma-separated triggering task IDs')
+    .option('--referenced-task-ids <id,id,...>', 'Comma-separated referenced task IDs')
+    .option('--data <json>', 'Raw JSON body to merge with flag-built body. Prefix with @ to read from a file. Flags win on conflict.')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -63,8 +84,17 @@ export function registerInternalTasksCommands(program: Command): void {
       if (opts.dueAt) body.due_at = opts.dueAt
       if (opts.pinned) body.pinned = true
       if (opts.locked) body.locked = true
+      if (opts.autoAssignToPartnershipId) body.auto_assign_to_partnership_id = Number(opts.autoAssignToPartnershipId)
+      if (opts.assignNowToPartnershipId) body.assign_now_to_partnership_id = Number(opts.assignNowToPartnershipId)
+      if (opts.taskIds) body.task_ids = parseIdList(opts.taskIds)
+      if (opts.referencedTaskIds) body.referenced_task_ids = parseIdList(opts.referencedTaskIds)
+      let payload: Record<string, unknown> = { internal_task: body }
+      if (opts.data) {
+        const overlay = parseDataFlag(opts.data)
+        payload = deepMerge(overlay, payload)
+      }
       const response = await withSpinner('Creating internal task...', () =>
-        client.post(`/api/v1/e/${event}/p/${partnership}/internal_tasks`, { internal_task: body })
+        client.post(`/api/v1/e/${event}/p/${partnership}/internal_tasks`, payload)
       )
       printObject(response.data, { json: g.json })
     })
@@ -77,6 +107,11 @@ export function registerInternalTasksCommands(program: Command): void {
     .option('--due-at <datetime>', 'New due date (ISO 8601)')
     .option('--pinned <bool>', 'Pinned (true/false)')
     .option('--locked <bool>', 'Locked (true/false)')
+    .option('--auto-assign-to-partnership-id <id>', 'Host team-member partnership ID to auto-assign')
+    .option('--assign-now-to-partnership-id <id>', 'Host team-member partnership ID to assign immediately')
+    .option('--task-ids <id,id,...>', 'Comma-separated triggering task IDs (replaces existing)')
+    .option('--referenced-task-ids <id,id,...>', 'Comma-separated referenced task IDs (replaces existing)')
+    .option('--data <json>', 'Raw JSON body to merge with flag-built body. Prefix with @ to read from a file. Flags win on conflict.')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -88,8 +123,17 @@ export function registerInternalTasksCommands(program: Command): void {
       if (opts.dueAt) body.due_at = opts.dueAt
       if (opts.pinned !== undefined) body.pinned = opts.pinned === 'true'
       if (opts.locked !== undefined) body.locked = opts.locked === 'true'
+      if (opts.autoAssignToPartnershipId) body.auto_assign_to_partnership_id = Number(opts.autoAssignToPartnershipId)
+      if (opts.assignNowToPartnershipId) body.assign_now_to_partnership_id = Number(opts.assignNowToPartnershipId)
+      if (opts.taskIds) body.task_ids = parseIdList(opts.taskIds)
+      if (opts.referencedTaskIds) body.referenced_task_ids = parseIdList(opts.referencedTaskIds)
+      let payload: Record<string, unknown> = { internal_task: body }
+      if (opts.data) {
+        const overlay = parseDataFlag(opts.data)
+        payload = deepMerge(overlay, payload)
+      }
       const response = await withSpinner('Updating internal task...', () =>
-        client.patch(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`, { internal_task: body })
+        client.patch(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`, payload)
       )
       printObject(response.data, { json: g.json })
     })
