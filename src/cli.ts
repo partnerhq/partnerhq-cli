@@ -6,7 +6,6 @@ import { registerConfigCommands } from './commands/config'
 import { registerWhoamiCommand } from './commands/whoami'
 import { registerMyEventsCommands } from './commands/my-events'
 import { registerEventsCommands } from './commands/events'
-import { registerOrganizationsCommands } from './commands/organizations'
 import { registerPartnershipsCommands } from './commands/partnerships'
 import { registerOrgPartnershipsCommands } from './commands/org-partnerships'
 import { registerTasksCommands } from './commands/tasks'
@@ -21,6 +20,9 @@ import { registerInvitationsCommands } from './commands/invitations'
 import { registerPartnerProfileCommands } from './commands/partner/profile'
 import { registerPartnerOrgPartnershipsCommands } from './commands/partner/org-partnerships'
 import { registerPartnerTaskCompletionsCommands } from './commands/partner/task-completions'
+import { registerPartnerChatCommands } from './commands/partner/chat'
+import { registerPartnerInvitationsCommands } from './commands/partner/invitations'
+import { registerPartnerUploadsCommands } from './commands/partner/uploads'
 
 const program = new Command()
 
@@ -42,7 +44,6 @@ registerWhoamiCommand(program)
 // Top-level commands (no event/partnership context required)
 registerMyEventsCommands(program)
 registerEventsCommands(program)
-registerOrganizationsCommands(program)
 
 // Host-scoped resources (require --event + --partnership)
 registerPartnershipsCommands(program)
@@ -65,6 +66,9 @@ const partnerCmd = program
 registerPartnerProfileCommands(partnerCmd)
 registerPartnerOrgPartnershipsCommands(partnerCmd)
 registerPartnerTaskCompletionsCommands(partnerCmd)
+registerPartnerChatCommands(partnerCmd)
+registerPartnerInvitationsCommands(partnerCmd)
+registerPartnerUploadsCommands(partnerCmd)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err)

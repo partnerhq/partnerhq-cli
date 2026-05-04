@@ -30,6 +30,7 @@ export function registerPartnerProfileCommands(cmd: Command): void {
     .option('--notify-for-new-chats <bool>', 'Notify for new chats (true/false)')
     .option('--notify-for-completed-tasks <bool>', 'Notify for completed tasks (true/false)')
     .option('--notify-for-task-reminders <bool>', 'Notify for task reminders (true/false)')
+    .option('--dismissed-welcome-message-at <datetime>', 'Mark the welcome message dismissed at this ISO 8601 datetime')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -41,6 +42,7 @@ export function registerPartnerProfileCommands(cmd: Command): void {
       if (opts.notifyForNewChats !== undefined) body.notify_for_new_chats = opts.notifyForNewChats === 'true'
       if (opts.notifyForCompletedTasks !== undefined) body.notify_for_completed_tasks = opts.notifyForCompletedTasks === 'true'
       if (opts.notifyForTaskReminders !== undefined) body.notify_for_task_reminders = opts.notifyForTaskReminders === 'true'
+      if (opts.dismissedWelcomeMessageAt) body.dismissed_welcome_message_at = opts.dismissedWelcomeMessageAt
       const response = await withSpinner('Updating profile...', () =>
         client.patch(`/api/v1/e/${event}/p/${partnership}/partner/profile`, { partnership: body })
       )

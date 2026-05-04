@@ -3,6 +3,7 @@ import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from 
 import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 import { confirmOrExit } from '../prompt'
+import { parseDataFlag, deepMerge } from '../data-flag'
 
 const LIST_COLS = ['id', 'label', 'go_to_link', 'pinned', 'locked', 'published_at', 'created_at']
 
@@ -54,6 +55,7 @@ export function registerResourcesCommands(program: Command): void {
     .option('--go-to-link-instructions <text>', 'Instructions for the link')
     .option('--pinned', 'Pin this resource')
     .option('--locked', 'Lock this resource')
+    .option('--data <json>', 'Raw JSON body to merge with flag-built body. Prefix with @ to read from a file. Flags win on conflict.')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -65,8 +67,14 @@ export function registerResourcesCommands(program: Command): void {
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
       if (opts.pinned) body.pinned = true
       if (opts.locked) body.locked = true
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
+      let payload: Record<string, unknown> = { resource: body }
+      if (opts.data) {
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
+      }
       const response = await withSpinner('Creating resource...', () =>
-        client.post(`/api/v1/e/${event}/p/${partnership}/resources`, { resource: body })
+        client.post(`/api/v1/e/${event}/p/${partnership}/resources`, payload)
       )
       printObject(response.data, { json: g.json })
     })
@@ -80,6 +88,7 @@ export function registerResourcesCommands(program: Command): void {
     .option('--go-to-link-instructions <text>', 'New instructions')
     .option('--pinned <bool>', 'Pinned (true/false)')
     .option('--locked <bool>', 'Locked (true/false)')
+    .option('--data <json>', 'Raw JSON body to merge with flag-built body. Prefix with @ to read from a file. Flags win on conflict.')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -92,8 +101,14 @@ export function registerResourcesCommands(program: Command): void {
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
       if (opts.pinned !== undefined) body.pinned = opts.pinned === 'true'
       if (opts.locked !== undefined) body.locked = opts.locked === 'true'
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
+      let payload: Record<string, unknown> = { resource: body }
+      if (opts.data) {
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
+      }
       const response = await withSpinner('Updating resource...', () =>
-        client.patch(`/api/v1/e/${event}/p/${partnership}/resources/${id}`, { resource: body })
+        client.patch(`/api/v1/e/${event}/p/${partnership}/resources/${id}`, payload)
       )
       printObject(response.data, { json: g.json })
     })

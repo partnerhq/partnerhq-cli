@@ -20,7 +20,6 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [config](#config)
   - [whoami](#whoami)
   - [my-events](#my-events)
-  - [organizations](#organizations)
   - [events](#events)
   - [partnerships](#partnerships)
   - [org-partnerships](#org-partnerships)
@@ -36,6 +35,10 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [partner profile](#partner-profile)
   - [partner org-partnerships](#partner-org-partnerships)
   - [partner task-completions](#partner-task-completions)
+  - [partner chat](#partner-chat)
+  - [partner invitations](#partner-invitations)
+  - [partner uploads](#partner-uploads)
+- [Power user: --data for nested attributes](#power-user---data-for-nested-attributes)
 - [Filtering with Ransack](#filtering-with-ransack)
 - [Pagination](#pagination)
 - [Output Modes](#output-modes)
@@ -347,18 +350,6 @@ phq my-events list [--page N] [--per-page N] [--json]
 
 ---
 
-### organizations
-
-List all organizations (customers) the authenticated user belongs to. Global endpoint — no event/partnership context required.
-
-```bash
-phq organizations list [--page N] [--per-page N] [--json]
-```
-
-Returns `id`, `name`, `permalink`, and `owner` (whether you are the owner of the organization).
-
----
-
 ### events
 
 Manage events (projects). These commands do **not** require `--event`/`--partnership`.
@@ -444,8 +435,8 @@ Manage to-do tasks within an event.
 ```bash
 phq tasks list    --event <permalink> --partnership <id> [--filter "..."] [--page N] [--per-page N] [--sort "position asc"]
 phq tasks get     <id>   --event <permalink> --partnership <id>
-phq tasks create  --event <permalink> --partnership <id> --label <label> [--description "..."] [--due-at "2025-06-01T00:00:00Z"] [--pinned] [--locked] [--advance] [--notify-hosts] [--go-to-link <url>]
-phq tasks update  <id>   --event <permalink> --partnership <id> [--label <label>] [--pinned true|false] [--locked true|false]
+phq tasks create  --event <permalink> --partnership <id> --label <label> [--description "..."] [--due-at "2025-06-01T00:00:00Z"] [--pinned] [--locked] [--advance] [--notify-hosts] [--go-to-link <url>] [--data <json|@file>]
+phq tasks update  <id>   --event <permalink> --partnership <id> [--label <label>] [--pinned true|false] [--locked true|false] [--data <json|@file>]
 phq tasks delete  <id>   --event <permalink> --partnership <id>
 ```
 
@@ -486,8 +477,8 @@ Manage resource tasks (links, documents) within an event. Resources are a subtyp
 ```bash
 phq resources list    --event <permalink> --partnership <id> [--filter "..."]
 phq resources get     <id>   --event <permalink> --partnership <id>
-phq resources create  --event <permalink> --partnership <id> --label <label> [--go-to-link <url>] [--go-to-link-instructions "..."] [--description "..."] [--pinned] [--locked]
-phq resources update  <id>   --event <permalink> --partnership <id> [--label <label>] [--go-to-link <url>]
+phq resources create  --event <permalink> --partnership <id> --label <label> [--go-to-link <url>] [--go-to-link-instructions "..."] [--description "..."] [--pinned] [--locked] [--data <json|@file>]
+phq resources update  <id>   --event <permalink> --partnership <id> [--label <label>] [--go-to-link <url>] [--data <json|@file>]
 phq resources delete  <id>   --event <permalink> --partnership <id>
 ```
 
@@ -502,8 +493,10 @@ Manage internal (host-only) tasks within an event.
 ```bash
 phq internal-tasks list    --event <permalink> --partnership <id> [--filter "..."]
 phq internal-tasks get     <id>   --event <permalink> --partnership <id>
-phq internal-tasks create  --event <permalink> --partnership <id> --label <label> [--description "..."] [--due-at "..."] [--pinned] [--locked]
-phq internal-tasks update  <id>   --event <permalink> --partnership <id> [--label <label>] [--pinned true|false]
+phq internal-tasks create  --event <permalink> --partnership <id> --label <label> [--description "..."] [--due-at "..."] [--pinned] [--locked] \
+  [--auto-assign-to-partnership-id <id>] [--assign-now-to-partnership-id <id>] [--task-ids <id,...>] [--referenced-task-ids <id,...>] [--data <json|@file>]
+phq internal-tasks update  <id>   --event <permalink> --partnership <id> [--label <label>] [--pinned true|false] \
+  [--auto-assign-to-partnership-id <id>] [--assign-now-to-partnership-id <id>] [--task-ids <id,...>] [--referenced-task-ids <id,...>] [--data <json|@file>]
 phq internal-tasks delete  <id>   --event <permalink> --partnership <id>
 ```
 
@@ -671,7 +664,8 @@ phq partner profile update --event <permalink> --partnership <id> \
   [--first-name <name>] [--last-name <name>] \
   [--notify-for-new-chats true|false] \
   [--notify-for-completed-tasks true|false] \
-  [--notify-for-task-reminders true|false]
+  [--notify-for-task-reminders true|false] \
+  [--dismissed-welcome-message-at "2025-06-01T00:00:00Z"]
 ```
 
 ---
@@ -698,6 +692,94 @@ phq partner task-completions update   <id>   --event <permalink> --partnership <
 phq partner task-completions complete <id>   --event <permalink> --partnership <id>
 phq partner task-completions reset    <id>   --event <permalink> --partnership <id>
 ```
+
+---
+
+### partner chat
+
+Read and write chat channels you have access to as a partner.
+
+```bash
+phq partner chat show     <identifier>   --event <permalink> --partnership <id>
+phq partner chat messages <identifier>   --event <permalink> --partnership <id> [--page N] [--per-page N]
+phq partner chat send     <identifier>   --event <permalink> --partnership <id> --text "Hello team!"
+```
+
+The `<identifier>` is the channel identifier from the API. Find it via the web UI or from the `partnerships_with_access` field returned by `phq partner chat show`.
+
+---
+
+### partner invitations
+
+Invite another organization to join your organization as a teammate (subject to event settings).
+
+```bash
+phq partner invitations create <organization-partnership-id> --event <permalink> --partnership <id> --email new@example.com
+```
+
+Returns `400 Bad Request` if the event has teammate invitations disabled.
+
+---
+
+### partner uploads
+
+Upload and download four kinds of files. All four sub-resources share the same `create`/`get` shape.
+
+```bash
+# Custom-field file
+phq partner uploads custom-field-file create --event <permalink> --partnership <id> --file ./receipt.pdf
+phq partner uploads custom-field-file get    <id> --event <permalink> --partnership <id> [--output ./receipt.pdf]
+
+# Image
+phq partner uploads image create --event <permalink> --partnership <id> --file ./photo.jpg
+phq partner uploads image get    <id> --event <permalink> --partnership <id> [--output ./photo.jpg]
+
+# Video
+phq partner uploads video create --event <permalink> --partnership <id> --file ./demo.mp4
+phq partner uploads video get    <id> --event <permalink> --partnership <id> [--output ./demo.mp4]
+
+# Generic file
+phq partner uploads file create --event <permalink> --partnership <id> --file ./report.pdf
+phq partner uploads file get    <id> --event <permalink> --partnership <id> [--output ./report.pdf]
+```
+
+`get` without `--output` prints a signed URL to stdout (scriptable). With `--output <path>`, follows the redirect and saves the file locally.
+
+---
+
+## Power user: --data for nested attributes
+
+`tasks`, `resources`, and `internal-tasks` accept a `--data` flag on `create` and `update` for any field not exposed as a top-level CLI flag (custom fields, inventories, organization assignments, descriptions-by-tags, asset/tag IDs, etc.). The value is JSON — either a literal string or `@path/to/file.json`.
+
+The CLI builds the request body from your named flags and then deep-merges your `--data` payload into it. **Named flag values win on conflict.** Arrays are replaced, not concatenated.
+
+```bash
+# Build the JSON in a file (lets you template / version-control it)
+cat > fields.json <<'EOF'
+{
+  "task": {
+    "custom_fields_attributes": [
+      { "type": "CustomFields::Text",   "name": "Legal name", "position": "1", "required": "true" },
+      { "type": "CustomFields::Select", "name": "Booth size",  "position": "2", "text_options": "Small\nMedium\nLarge" }
+    ]
+  }
+}
+EOF
+phq tasks create --event acme-2025 --partnership 1 --label "Booth Preferences" --data @./fields.json
+
+# Or pass JSON inline
+phq tasks update 302 --event acme-2025 --partnership 1 \
+  --data '{"task":{"custom_fields_attributes":[{"id":901,"_destroy":true}]}}'
+```
+
+The same pattern applies to `resources` and `internal-tasks`:
+
+```bash
+phq resources create --event acme-2025 --partnership 1 --label "Press Kit" --data @./resource_fields.json
+phq internal-tasks update 55 --event acme-2025 --partnership 1 --data '{"internal_task":{"description":"Updated via CLI"}}'
+```
+
+See the live API docs at <https://app.partnerhq.com/developers> for the full list of accepted nested attributes and types.
 
 ---
 

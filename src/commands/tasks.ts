@@ -3,6 +3,7 @@ import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from 
 import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 import { confirmOrExit } from '../prompt'
+import { parseDataFlag, deepMerge } from '../data-flag'
 
 const LIST_COLS = ['id', 'label', 'type', 'pinned', 'locked', 'advance', 'due_at', 'published_at', 'created_at']
 
@@ -57,6 +58,7 @@ export function registerTasksCommands(program: Command): void {
     .option('--notify-hosts', 'Notify hosts on completion')
     .option('--go-to-link <url>', 'Go-to link URL')
     .option('--go-to-link-instructions <text>', 'Instructions for the go-to link')
+    .option('--data <json>', 'Raw JSON body to merge with flag-built body. Prefix with @ to read from a file. Flags win on conflict.')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -71,8 +73,14 @@ export function registerTasksCommands(program: Command): void {
       if (opts.notifyHosts) body.notify_hosts_on_completion = true
       if (opts.goToLink) body.go_to_link = opts.goToLink
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
+      let payload: Record<string, unknown> = { task: body }
+      if (opts.data) {
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
+      }
       const response = await withSpinner('Creating task...', () =>
-        client.post(`/api/v1/e/${event}/p/${partnership}/tasks`, { task: body })
+        client.post(`/api/v1/e/${event}/p/${partnership}/tasks`, payload)
       )
       printObject(response.data, { json: g.json })
     })
@@ -89,6 +97,7 @@ export function registerTasksCommands(program: Command): void {
     .option('--notify-hosts <bool>', 'Notify hosts on completion (true/false)')
     .option('--go-to-link <url>', 'Go-to link URL')
     .option('--go-to-link-instructions <text>', 'Instructions for the go-to link')
+    .option('--data <json>', 'Raw JSON body to merge with flag-built body. Prefix with @ to read from a file. Flags win on conflict.')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -104,8 +113,14 @@ export function registerTasksCommands(program: Command): void {
       if (opts.notifyHosts !== undefined) body.notify_hosts_on_completion = opts.notifyHosts === 'true'
       if (opts.goToLink) body.go_to_link = opts.goToLink
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
+      let payload: Record<string, unknown> = { task: body }
+      if (opts.data) {
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
+      }
       const response = await withSpinner('Updating task...', () =>
-        client.patch(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`, { task: body })
+        client.patch(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`, payload)
       )
       printObject(response.data, { json: g.json })
     })
