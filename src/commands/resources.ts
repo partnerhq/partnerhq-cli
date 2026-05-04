@@ -67,10 +67,11 @@ export function registerResourcesCommands(program: Command): void {
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
       if (opts.pinned) body.pinned = true
       if (opts.locked) body.locked = true
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
       let payload: Record<string, unknown> = { resource: body }
       if (opts.data) {
-        const overlay = parseDataFlag(opts.data)
-        payload = deepMerge(overlay, payload)
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
       }
       const response = await withSpinner('Creating resource...', () =>
         client.post(`/api/v1/e/${event}/p/${partnership}/resources`, payload)
@@ -100,10 +101,11 @@ export function registerResourcesCommands(program: Command): void {
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
       if (opts.pinned !== undefined) body.pinned = opts.pinned === 'true'
       if (opts.locked !== undefined) body.locked = opts.locked === 'true'
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
       let payload: Record<string, unknown> = { resource: body }
       if (opts.data) {
-        const overlay = parseDataFlag(opts.data)
-        payload = deepMerge(overlay, payload)
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
       }
       const response = await withSpinner('Updating resource...', () =>
         client.patch(`/api/v1/e/${event}/p/${partnership}/resources/${id}`, payload)

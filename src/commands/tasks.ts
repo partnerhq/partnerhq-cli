@@ -73,10 +73,11 @@ export function registerTasksCommands(program: Command): void {
       if (opts.notifyHosts) body.notify_hosts_on_completion = true
       if (opts.goToLink) body.go_to_link = opts.goToLink
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
       let payload: Record<string, unknown> = { task: body }
       if (opts.data) {
-        const overlay = parseDataFlag(opts.data)
-        payload = deepMerge(overlay, payload)
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
       }
       const response = await withSpinner('Creating task...', () =>
         client.post(`/api/v1/e/${event}/p/${partnership}/tasks`, payload)
@@ -112,10 +113,11 @@ export function registerTasksCommands(program: Command): void {
       if (opts.notifyHosts !== undefined) body.notify_hosts_on_completion = opts.notifyHosts === 'true'
       if (opts.goToLink) body.go_to_link = opts.goToLink
       if (opts.goToLinkInstructions) body.go_to_link_instructions = opts.goToLinkInstructions
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
       let payload: Record<string, unknown> = { task: body }
       if (opts.data) {
-        const overlay = parseDataFlag(opts.data)
-        payload = deepMerge(overlay, payload)
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
       }
       const response = await withSpinner('Updating task...', () =>
         client.patch(`/api/v1/e/${event}/p/${partnership}/tasks/${id}`, payload)

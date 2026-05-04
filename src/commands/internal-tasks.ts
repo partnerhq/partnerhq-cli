@@ -1,3 +1,4 @@
+import chalk from 'chalk'
 import { Command } from 'commander'
 import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
 import { printList, printObject, printSuccess, printBanner } from '../output'
@@ -5,7 +6,7 @@ import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 import { confirmOrExit } from '../prompt'
 import { parseDataFlag, deepMerge } from '../data-flag'
 
-function parseIdList(value: string): number[] {
+function parseIdList(value: string, flagName: string): number[] {
   return value
     .split(',')
     .map((s) => s.trim())
@@ -13,7 +14,7 @@ function parseIdList(value: string): number[] {
     .map((s) => {
       const n = Number(s)
       if (!Number.isInteger(n)) {
-        console.error(`✗ Invalid id "${s}" in list — expected an integer.`)
+        console.error(chalk.red('✗') + ` Invalid id "${s}" in ${flagName}: expected an integer.`)
         process.exit(1)
       }
       return n
@@ -86,12 +87,13 @@ export function registerInternalTasksCommands(program: Command): void {
       if (opts.locked) body.locked = true
       if (opts.autoAssignToPartnershipId) body.auto_assign_to_partnership_id = Number(opts.autoAssignToPartnershipId)
       if (opts.assignNowToPartnershipId) body.assign_now_to_partnership_id = Number(opts.assignNowToPartnershipId)
-      if (opts.taskIds) body.task_ids = parseIdList(opts.taskIds)
-      if (opts.referencedTaskIds) body.referenced_task_ids = parseIdList(opts.referencedTaskIds)
+      if (opts.taskIds) body.task_ids = parseIdList(opts.taskIds, '--task-ids')
+      if (opts.referencedTaskIds) body.referenced_task_ids = parseIdList(opts.referencedTaskIds, '--referenced-task-ids')
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
       let payload: Record<string, unknown> = { internal_task: body }
       if (opts.data) {
-        const overlay = parseDataFlag(opts.data)
-        payload = deepMerge(overlay, payload)
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
       }
       const response = await withSpinner('Creating internal task...', () =>
         client.post(`/api/v1/e/${event}/p/${partnership}/internal_tasks`, payload)
@@ -125,12 +127,13 @@ export function registerInternalTasksCommands(program: Command): void {
       if (opts.locked !== undefined) body.locked = opts.locked === 'true'
       if (opts.autoAssignToPartnershipId) body.auto_assign_to_partnership_id = Number(opts.autoAssignToPartnershipId)
       if (opts.assignNowToPartnershipId) body.assign_now_to_partnership_id = Number(opts.assignNowToPartnershipId)
-      if (opts.taskIds) body.task_ids = parseIdList(opts.taskIds)
-      if (opts.referencedTaskIds) body.referenced_task_ids = parseIdList(opts.referencedTaskIds)
+      if (opts.taskIds) body.task_ids = parseIdList(opts.taskIds, '--task-ids')
+      if (opts.referencedTaskIds) body.referenced_task_ids = parseIdList(opts.referencedTaskIds, '--referenced-task-ids')
+      // Flag-built `payload` overlays the parsed --data, so flags win on conflict.
       let payload: Record<string, unknown> = { internal_task: body }
       if (opts.data) {
-        const overlay = parseDataFlag(opts.data)
-        payload = deepMerge(overlay, payload)
+        const dataPayload = parseDataFlag(opts.data)
+        payload = deepMerge(dataPayload, payload)
       }
       const response = await withSpinner('Updating internal task...', () =>
         client.patch(`/api/v1/e/${event}/p/${partnership}/internal_tasks/${id}`, payload)
