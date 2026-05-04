@@ -30,6 +30,8 @@ Bring `partnerhq-cli` to full parity with the live production PartnerHQ API. The
 
 ### Missing in CLI
 
+**New endpoints (no CLI command at all):**
+
 | API endpoint | Method | What it does |
 |---|---|---|
 | `/partner/chat_channels/:identifier` | GET | Show one chat channel + last 30 messages |
@@ -41,6 +43,17 @@ Bring `partnerhq-cli` to full parity with the live production PartnerHQ API. The
 | `/partner/videos` | POST / GET | Upload + download a video |
 | `/partner/uploads` | POST / GET | Upload + download a generic file |
 
+**Existing endpoints with new accepted fields (CLI command exists but doesn't expose them):**
+
+| Endpoint | Newly-accepted fields |
+|---|---|
+| `PATCH /partner/profile` | `dismissed_welcome_message_at` |
+| `POST/PATCH /tasks` | `custom_fields_attributes`, `inventories_attributes`, `organization_partnership_task_completions_attributes`, `descriptions_by_tags_attributes`, `referenced_task_ids`, `organization_tag_ids` (update only), `asset_ids` |
+| `POST/PATCH /resources` | `custom_fields_attributes`, `resource_templates_attributes`, `organization_partnership_task_completions_attributes`, `descriptions_by_tags_attributes`, `organization_tag_ids`, `asset_ids` |
+| `POST/PATCH /internal_tasks` | `auto_assign_to_partnership_id`, `assign_now_to_partnership_id`, `task_ids`, `referenced_task_ids`, `custom_fields_attributes`, `organization_partnership_task_completions_attributes` |
+
+The nested-attribute fields (`*_attributes`) are deep, polymorphic structures (e.g. `custom_fields_attributes` accepts 9 field types with branching sub-options). They are unsuitable for flag-per-attribute CLI design.
+
 ### Anomaly to remove
 
 `src/commands/organizations.ts` (registered in `src/cli.ts`) calls `GET /api/v1/organizations`. **This endpoint does not exist in production** — it lives only on an unmerged feature branch. The CLI command is broken in the only environment it actually targets. Since no users are relying on the CLI today, the cleanest fix is to delete the command rather than carry a broken stub.
@@ -49,7 +62,7 @@ Bring `partnerhq-cli` to full parity with the live production PartnerHQ API. The
 
 ### Command surface
 
-Three new command groups, plus one removal.
+Three new command groups, four extensions to existing groups, and one removal.
 
 #### New: `phq partner chat`
 File: `src/commands/partner/chat.ts`
@@ -113,6 +126,45 @@ Behavior:
 
 The `id` parameter is the API's opaque token, not a database ID — the API uses `find_by(token: params[:id])`.
 
+#### Extended: `phq partner profile update`
+
+Add one new flag to the existing command:
+
+```
+phq partner profile update --dismissed-welcome-message-at <iso8601-datetime>
+```
+
+Maps to `PATCH /partner/profile` with `{ partnership: { dismissed_welcome_message_at: <value> } }` (or whatever wrapper key the existing command already uses — consistent with current pattern).
+
+#### Extended: `phq tasks`, `phq resources`, `phq internal-tasks` (host CRUD)
+
+Add a generic `--data <json|@file>` escape hatch to `create` and `update` on each of the three commands. Existing flags continue to work; `--data` merges arbitrary JSON into the request body.
+
+```
+phq tasks create --label "Booth Preferences" --data @./fields.json
+phq tasks update <id> --data '{"task":{"custom_fields_attributes":[{"id":901,"_destroy":true}]}}'
+phq resources create --label "Vendor Handbook" --data @./resource.json
+phq internal-tasks create --label "Confirm catering" \
+  --auto-assign-to-partnership-id 101 \
+  --task-ids 12,34,56
+```
+
+Behavior:
+
+- Argument forms: `--data '{"...":...}'` (literal JSON) or `--data @path/to/file.json` (read file).
+- The CLI builds the request body from flags as it does today (e.g. `{ task: { label, description, ... } }`), then **deep-merges** the parsed `--data` JSON over it. Flag values win on conflict; `--data` provides everything else (nested arrays/objects pass through verbatim).
+- Validation: parse-fail on invalid JSON with a clear error before any network call.
+- The `--data` payload is the body wrapper itself (e.g. `{ "task": { ... } }`), not the inner attributes — matches what users will copy from the API docs.
+
+**New scalar/array flags on `phq internal-tasks create / update`** (these are simple enough to deserve real flags, beyond `--data`):
+
+- `--auto-assign-to-partnership-id <id>`
+- `--assign-now-to-partnership-id <id>`
+- `--task-ids <id,id,...>` (triggering task IDs)
+- `--referenced-task-ids <id,id,...>`
+
+No new flag-per-attribute coverage on `tasks` / `resources` beyond what already exists — the nested attributes go through `--data`.
+
 #### Removed: `phq organizations`
 
 Delete:
@@ -122,6 +174,20 @@ Delete:
 - The "Organizations" section in `README.md` (if present)
 
 ### Shared helpers
+
+New helpers for `--data` parsing in a new `src/data-flag.ts`:
+
+```ts
+// Parse `--data <value>`: if `value` starts with `@`, read from file; else parse literal.
+// Throws with a clear error on invalid JSON or missing file.
+function parseDataFlag(value: string): Record<string, unknown>
+
+// Deep-merge two plain-object trees. Used to combine flag-built body with --data.
+// Right operand wins on scalar conflict; arrays are replaced (not concatenated).
+function deepMerge<T extends object>(base: T, overlay: Record<string, unknown>): T
+```
+
+Note on merge precedence: the spec's stated rule is "flags win on conflict." Implementation flips the merge order accordingly — flag-built body is the overlay, `--data` is the base.
 
 New helpers in `src/api-client.ts`:
 
@@ -163,14 +229,21 @@ src/
       chat.ts               (new)
       invitations.ts        (new)
       uploads.ts            (new)
-      ... (existing partner commands unchanged)
+      profile.ts            (extended: --dismissed-welcome-message-at)
+      ... (other partner commands unchanged)
+    tasks.ts                (extended: --data; deep-merge in create/update)
+    resources.ts            (extended: --data; deep-merge in create/update)
+    internal-tasks.ts       (extended: --data + 4 new scalar/array flags)
     organizations.ts        (DELETED)
     ... (other existing commands unchanged)
+  data-flag.ts              (new: parseDataFlag + deepMerge)
 ```
 
 ### README updates
 
 - Add "Partner Chat", "Partner Invitations", and "Partner Uploads" sections under the existing partner-commands area, in the same tone and format as the other partner sections.
+- Add a "Power user: `--data`" subsection on `tasks`, `resources`, and `internal-tasks` showing how to construct nested-attribute payloads (custom fields, inventories, assignments). Link to the live `/developers` docs as the canonical schema.
+- Note `--dismissed-welcome-message-at` under partner profile.
 - Remove the organizations section.
 - Bump the example list at the top to mention chat/uploads/invitations.
 
@@ -199,5 +272,9 @@ Manual, against the local dev server (`--test`, hitting `http://phq.test`):
    - `create --file ./sample.ext` returns `{ link: "..." }` (or full record for custom-field-file).
    - `get <id>` prints a signed URL.
    - `get <id> --output ./out.ext` writes the file; bytes match the original.
-6. `phq organizations list` is gone (`phq --help` no longer mentions it).
-7. `phq --help` and `phq partner --help` show the new groups.
+6. `phq partner profile update --dismissed-welcome-message-at "2026-05-03T12:00:00Z"` succeeds and persists.
+7. `phq tasks create --label "Booth" --data @./fields.json` (where `fields.json` contains a `task.custom_fields_attributes` payload) creates a task with custom fields; the same shape works for `tasks update`, `resources create/update`, and `internal-tasks create/update`.
+8. `phq internal-tasks create --label "Confirm catering" --auto-assign-to-partnership-id 101 --task-ids 12,34,56` creates the record with the correct triggering tasks and assignment.
+9. Conflict between `--data` and a flag: a flag value wins (verified by inspecting the persisted record).
+10. `phq organizations list` is gone (`phq --help` no longer mentions it).
+11. `phq --help` and `phq partner --help` show the new groups.
