@@ -320,23 +320,46 @@ phq config unset test
 
 ### whoami
 
-Show your full current CLI context at a glance.
+Show your full current CLI context at a glance, including which user the stored token belongs to. When authenticated, `whoami` calls `GET /api/v1/me` to fetch identity (name, email, user ID, admin flag); on network failure or rejected tokens it degrades to a local-only view rather than exiting with an error.
 
 ```bash
 phq whoami [--json]
 ```
 
 ```
-┌───────────────┬────────────────────────────────────────┐
-│ Environment   │ production (https://app.partnerhq.com) │
-├───────────────┼────────────────────────────────────────┤
-│ Authenticated │ ✓ abc12345...xyz9                      │
-├───────────────┼────────────────────────────────────────┤
-│ Event         │ acme-summit-2025                       │
-├───────────────┼────────────────────────────────────────┤
-│ Partnership   │ 42                                     │
-└───────────────┴────────────────────────────────────────┘
+┌──────────────┬───────────────────────────────┐
+│ Logged in as │ Jane Smith <jane@example.com> │
+├──────────────┼───────────────────────────────┤
+│ User ID      │ 200                           │
+├──────────────┼───────────────────────────────┤
+│ Admin        │ —                             │
+└──────────────┴───────────────────────────────┘
+┌─────────────┬────────────────────────────────────────┐
+│ Environment │ production (https://app.partnerhq.com) │
+├─────────────┼────────────────────────────────────────┤
+│ Token       │ ✓ abc12345...xyz9                      │
+├─────────────┼────────────────────────────────────────┤
+│ Event       │ acme-summit-2025                       │
+├─────────────┼────────────────────────────────────────┤
+│ Partnership │ 42                                     │
+└─────────────┴────────────────────────────────────────┘
 ```
+
+The `--json` form returns the same data as a structured object — useful in CI/scripting:
+
+```json
+{
+  "environment": "production",
+  "base_url": "https://app.partnerhq.com",
+  "authenticated": true,
+  "identity": { "id": 200, "name": "Jane Smith", "email": "jane@example.com", "admin": false },
+  "identity_error": null,
+  "event": "acme-summit-2025",
+  "partnership": "42"
+}
+```
+
+If the API is unreachable or the token is rejected, `identity` is `null` and `identity_error` describes why — `authenticated: true` still indicates a token is stored locally.
 
 ---
 
