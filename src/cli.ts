@@ -4,6 +4,7 @@ import { Command } from 'commander'
 import { registerAuthCommands } from './commands/auth'
 import { registerConfigCommands } from './commands/config'
 import { registerWhoamiCommand } from './commands/whoami'
+import { registerDashboardCommand } from './commands/dashboard'
 import { registerMyEventsCommands } from './commands/my-events'
 import { registerMyOrganizationsCommands } from './commands/my-organizations'
 import { registerEventsCommands } from './commands/events'
@@ -41,6 +42,7 @@ program
 registerAuthCommands(program)
 registerConfigCommands(program)
 registerWhoamiCommand(program)
+registerDashboardCommand(program)
 
 // Top-level commands (no event/partnership context required)
 registerMyEventsCommands(program)

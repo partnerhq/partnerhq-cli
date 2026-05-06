@@ -19,6 +19,7 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [auth](#auth)
   - [config](#config)
   - [whoami](#whoami)
+  - [dashboard](#dashboard)
   - [my-events](#my-events)
   - [my-organizations](#my-organizations)
   - [events](#events)
@@ -361,6 +362,26 @@ The `--json` form returns the same data as a structured object — useful in CI/
 ```
 
 If the API is unreachable or the token is rejected, `identity` is `null` and `identity_error` describes why — `authenticated: true` still indicates a token is stored locally.
+
+---
+
+### dashboard
+
+Show **your dashboard** for the current event — every task completion assigned to you across all task types (ToDos, Resources, and, for hosts, Internal Tasks). Internally calls `partner task-completions list?type=all`, so the response always includes a `task_type` column to distinguish each row's type. Requires `--event` and `--partnership` (or saved config defaults).
+
+```bash
+phq dashboard [--filter <predicate=value>] [--page N] [--per-page N] [--sort <predicate>] [--json]
+```
+
+```bash
+# Just my open assignments in the current event
+phq dashboard --filter "completed_at_null=true"
+
+# Sorted by due date
+phq dashboard --sort "due_at asc"
+```
+
+Columns: `id`, `task_type`, `label`, `task_id`, `enabled`, `completed_at`, `due_at`, `overdue`, `created_at`.
 
 ---
 
