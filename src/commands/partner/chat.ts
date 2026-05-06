@@ -1,14 +1,34 @@
 import { Command } from 'commander'
-import { createClient, withSpinner } from '../../api-client'
-import { printObject, printArray, printBanner } from '../../output'
+import { createClient, withSpinner, PaginatedResponse } from '../../api-client'
+import { printList, printObject, printArray, printBanner } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
 
 const MESSAGE_COLS = ['id', 'created_at', 'partnership_id', 'text']
+const CHANNEL_LIST_COLS = ['identifier', 'channelable_type', 'channelable_id', 'label', 'task_completion_id', 'task_type']
 
 export function registerPartnerChatCommands(cmd: Command): void {
   const chat = cmd
     .command('chat')
     .description('Chat channels you have access to as a partner')
+
+  chat
+    .command('list')
+    .description("List the chat channels you have access to (your partnership's channel + your task completions' channels)")
+    .option('--type <kind>', "Filter by channelable type: 'partnership' or 'task_completion'")
+    .option('--page <n>', 'Page number', '1')
+    .option('--per-page <n>', 'Results per page (max 250)', '30')
+    .action(async (opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const params: Record<string, unknown> = { page: opts.page, per_page: opts.perPage }
+      if (opts.type) params.type = opts.type
+      const response = await withSpinner('Fetching chat channels...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/partner/chat_channels`, { params })
+      )
+      printList(response.data as PaginatedResponse<Record<string, unknown>>, CHANNEL_LIST_COLS, { json: g.json })
+    })
 
   chat
     .command('show <identifier>')
