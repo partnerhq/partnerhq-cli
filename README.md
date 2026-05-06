@@ -748,6 +748,8 @@ phq partner task-completions complete <id>   --event <permalink> --partnership <
 phq partner task-completions reset    <id>   --event <permalink> --partnership <id>
 ```
 
+`get` returns the assignment's metadata along with the underlying task, including the task's `description`. The description is rich-text HTML; in default (table) mode the CLI strips the HTML and prints the description as readable plain text below the main table. With `--json` the raw HTML is preserved so consumers can render it themselves.
+
 ---
 
 ### partner chat

@@ -1,7 +1,9 @@
 import { Command } from 'commander'
+import chalk from 'chalk'
 import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../../api-client'
 import { printList, printObject, printBanner } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
+import { htmlToText } from '../../html'
 
 const LIST_COLS = ['id', 'label', 'task_id', 'enabled', 'completed_at', 'due_at', 'overdue', 'created_at']
 
@@ -41,7 +43,26 @@ export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
       const response = await withSpinner('Fetching task assignment...', () =>
         client.get(`/api/v1/e/${event}/p/${partnership}/partner/task_completions/${id}`)
       )
-      printObject(response.data, { json: g.json })
+
+      const description = (response.data as { task?: { description?: string } })?.task?.description
+
+      if (g.json) {
+        printObject(response.data, { json: true })
+        return
+      }
+
+      // Render the table without the (potentially massive) HTML description,
+      // then print the description as plain text underneath.
+      const data = response.data as Record<string, unknown>
+      const taskCopy = data.task ? { ...(data.task as Record<string, unknown>) } : null
+      if (taskCopy) delete taskCopy.description
+      const forTable = { ...data, task: taskCopy ?? data.task }
+      printObject(forTable, { json: false })
+
+      if (description) {
+        console.log('\n' + chalk.bold.cyan('Description'))
+        console.log(htmlToText(description))
+      }
     })
 
   tcCmd
