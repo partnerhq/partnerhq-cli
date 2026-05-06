@@ -4,6 +4,7 @@ import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from 
 import { printList, printObject, printBanner } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
 import { htmlToText } from '../../html'
+import { parseDataFlag, deepMerge } from '../../data-flag'
 
 const LIST_COLS = ['id', 'label', 'task_id', 'enabled', 'completed_at', 'due_at', 'overdue', 'created_at']
 
@@ -69,13 +70,15 @@ export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
     .command('update <id>')
     .description("Update a task assignment")
     .option('--due-at <datetime>', 'Override due date (ISO 8601)')
+    .option('--data <json>', "Power-user: extra task_completion attributes as JSON or @file (e.g. custom_field_values_attributes)")
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const body: Record<string, unknown> = {}
+      let body: Record<string, unknown> = {}
       if (opts.dueAt) body.due_at = opts.dueAt
+      if (opts.data) body = deepMerge(body, parseDataFlag(opts.data))
       const response = await withSpinner('Updating task assignment...', () =>
         client.patch(`/api/v1/e/${event}/p/${partnership}/partner/task_completions/${id}`, { task_completion: body })
       )

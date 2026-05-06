@@ -750,6 +750,15 @@ phq partner task-completions reset    <id>   --event <permalink> --partnership <
 
 `get` returns the assignment's metadata along with the underlying task, including the task's `description`. The description is rich-text HTML; in default (table) mode the CLI strips the HTML and prints the description as readable plain text below the main table. With `--json` the raw HTML is preserved so consumers can render it themselves.
 
+`update` accepts `--due-at` for the due date and `--data <json>` (or `@file.json`) for everything else, including custom field values:
+
+```bash
+# Update a few custom field values in one call
+phq partner task-completions update 286826 --data '{"custom_field_values_attributes":[{"id":115507,"value":"Mint chocolate chip"},{"id":115512,"value":[]}]}'
+```
+
+Where `id` is the `custom_field_values[].id` returned by `get`. CheckboxGroup fields take an array; all other types take a scalar.
+
 ---
 
 ### partner chat
