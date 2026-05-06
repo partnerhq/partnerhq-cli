@@ -697,15 +697,16 @@ phq partner task-completions reset    <id>   --event <permalink> --partnership <
 
 ### partner chat
 
-Read and write chat channels you have access to as a partner.
+Read and write chat channels you have access to as a partner. Use `list` to discover channel identifiers, then `show`/`messages`/`send` against a specific identifier.
 
 ```bash
+phq partner chat list                    --event <permalink> --partnership <id> [--type partnership|task_completion] [--page N] [--per-page N]
 phq partner chat show     <identifier>   --event <permalink> --partnership <id>
 phq partner chat messages <identifier>   --event <permalink> --partnership <id> [--page N] [--per-page N]
 phq partner chat send     <identifier>   --event <permalink> --partnership <id> --text "Hello team!"
 ```
 
-The `<identifier>` is the channel identifier from the API. Find it via the web UI or from the `partnerships_with_access` field returned by `phq partner chat show`.
+`list` returns every chat channel the caller has access to in the project: their own partnership channel (the "Project chat" / dashboard chat) plus the chat channels for any task completions belonging to their organizations. Hosts see every channel in the project. Each row carries an `identifier` (use it with the other subcommands), the `channelable_type` (`Partnership` or `TaskCompletion`), the `channelable_id`, a human-readable `label`, and — for `TaskCompletion` rows — `task_completion_id` and `task_type` so callers can filter or scope.
 
 ---
 
