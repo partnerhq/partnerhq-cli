@@ -5,6 +5,7 @@ import { registerAuthCommands } from './commands/auth'
 import { registerConfigCommands } from './commands/config'
 import { registerWhoamiCommand } from './commands/whoami'
 import { registerMyEventsCommands } from './commands/my-events'
+import { registerMyOrganizationsCommands } from './commands/my-organizations'
 import { registerEventsCommands } from './commands/events'
 import { registerPartnershipsCommands } from './commands/partnerships'
 import { registerOrgPartnershipsCommands } from './commands/org-partnerships'
@@ -43,6 +44,7 @@ registerWhoamiCommand(program)
 
 // Top-level commands (no event/partnership context required)
 registerMyEventsCommands(program)
+registerMyOrganizationsCommands(program)
 registerEventsCommands(program)
 
 // Host-scoped resources (require --event + --partnership)

@@ -20,6 +20,7 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [config](#config)
   - [whoami](#whoami)
   - [my-events](#my-events)
+  - [my-organizations](#my-organizations)
   - [events](#events)
   - [partnerships](#partnerships)
   - [org-partnerships](#org-partnerships)
@@ -369,6 +370,16 @@ List all events the authenticated user belongs to (no event/partnership context 
 
 ```bash
 phq my-events list [--page N] [--per-page N] [--json]
+```
+
+---
+
+### my-organizations
+
+List all organizations the authenticated user is a member of (no event/partnership context required). Returns each organization's `id`, `name`, `permalink`, plus the `owner` (whether the user owns the organization) and `current` (whether it's the user's currently active organization) flags. Use the `organization_id` values when creating a new event — `owner_organization_id` must reference an organization the user belongs to.
+
+```bash
+phq my-organizations list [--page N] [--per-page N] [--json]
 ```
 
 ---
