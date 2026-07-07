@@ -34,6 +34,7 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [authorizations](#authorizations)
   - [messages](#messages)
   - [invitations](#invitations)
+  - [inbox](#inbox)
   - [partner profile](#partner-profile)
   - [partner org-partnerships](#partner-org-partnerships)
   - [partner task-completions](#partner-task-completions)
@@ -466,6 +467,10 @@ phq org-partnerships delete  <id>   --event <permalink> --partnership <id>
 
 # Find or create by name (idempotent)
 phq org-partnerships retrieve --event <permalink> --partnership <id> --name <name>
+
+# Approve or deny an organization pending approval (self-registration workflow)
+phq org-partnerships approve <id> --event <permalink> --partnership <id>
+phq org-partnerships deny    <id> --event <permalink> --partnership <id> [--reason <text>]
 ```
 
 **Example filters:**
@@ -690,12 +695,21 @@ phq messages list --event acme-2025 --partnership 1 --filter "text_cont=hello"
 
 ### invitations
 
-Read invitations within an event (read-only).
+Manage invitations within an event.
 
 ```bash
-phq invitations list --event <permalink> --partnership <id> [--filter "..."]
-phq invitations get  <id>   --event <permalink> --partnership <id>
+phq invitations list   --event <permalink> --partnership <id> [--filter "..."]
+phq invitations get    <id> --event <permalink> --partnership <id>
+phq invitations create --event <permalink> --partnership <id> \
+  --email <email> [--first-name <name>] [--last-name <name>] \
+  [--host] [--read-only] [--organization <name>]... [--data <json|@file>]
+phq invitations resend <id> --event <permalink> --partnership <id>
 ```
+
+`create` creates the partnership and emails the invitation, exactly like "Invite"
+in the web UI. Partner invitations require at least one `--organization` (the org
+is found or created by name). `--host` invites a teammate instead of a partner.
+`resend` re-sends the email for a still-pending invitation.
 
 **Example filters:**
 
@@ -706,6 +720,37 @@ phq invitations list --event acme-2025 --partnership 1 --filter "state_eq=pendin
 # Invitations by email
 phq invitations list --event acme-2025 --partnership 1 --filter "email_cont=@acme.com"
 ```
+
+**Examples:**
+
+```bash
+# Invite a partner attached to their company
+phq invitations create --event acme-2025 --partnership 1 \
+  --email jane@vendor.com --first-name Jane --last-name Doe --organization "Vendor Co"
+
+# Invite a read-only teammate
+phq invitations create --event acme-2025 --partnership 1 \
+  --email intern@host.com --host --read-only
+```
+
+---
+
+### inbox
+
+Host inbox: the unread/flagged conversation tree across the whole project
+(individuals → organizations → tasks/resources/internal tasks). Host-only.
+
+```bash
+phq inbox tree      --event <permalink> --partnership <id> [--json]
+phq inbox flag      <chat_channel_id> --event <permalink> --partnership <id>
+phq inbox unflag    <chat_channel_id> --event <permalink> --partnership <id>
+phq inbox mark-read <identifier>      --event <permalink> --partnership <id>
+```
+
+`tree` prints each conversation with its numeric `channel=` ID (for
+`flag`/`unflag`) and `[identifier]` UUID (for `mark-read`, and for reading the
+thread with `phq partner chat show/messages`). Unread counts and flags roll up
+to parent nodes.
 
 ---
 

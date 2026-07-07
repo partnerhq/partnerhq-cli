@@ -98,6 +98,37 @@ export function registerOrgPartnershipsCommands(program: Command): void {
     })
 
   cmd
+    .command('approve <id>')
+    .description('Approve a pending organization partnership')
+    .action(async (id, _opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Approving organization...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/organization_partnerships/${id}/approve`)
+      )
+      printObject(response.data, { json: g.json })
+    })
+
+  cmd
+    .command('deny <id>')
+    .description('Deny a pending organization partnership')
+    .option('--reason <text>', 'Denial reason shown to the organization')
+    .action(async (id, opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const body: Record<string, unknown> = {}
+      if (opts.reason) body.denial_reason = opts.reason
+      const response = await withSpinner('Denying organization...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/organization_partnerships/${id}/deny`, body)
+      )
+      printObject(response.data, { json: g.json })
+    })
+
+  cmd
     .command('retrieve')
     .description('Find or create an organization partnership by name (idempotent)')
     .requiredOption('--name <name>', 'Organization name')

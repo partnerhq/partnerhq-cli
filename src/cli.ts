@@ -19,6 +19,7 @@ import { registerTaskCompletionsCommands } from './commands/task-completions'
 import { registerAuthorizationsCommands } from './commands/authorizations'
 import { registerMessagesCommands } from './commands/messages'
 import { registerInvitationsCommands } from './commands/invitations'
+import { registerInboxCommands } from './commands/inbox'
 import { registerPartnerProfileCommands } from './commands/partner/profile'
 import { registerPartnerOrgPartnershipsCommands } from './commands/partner/org-partnerships'
 import { registerPartnerTaskCompletionsCommands } from './commands/partner/task-completions'
@@ -61,6 +62,7 @@ registerTaskCompletionsCommands(program)
 registerAuthorizationsCommands(program)
 registerMessagesCommands(program)
 registerInvitationsCommands(program)
+registerInboxCommands(program)
 
 // Partner sub-commands — grouped under `partner`
 const partnerCmd = program
