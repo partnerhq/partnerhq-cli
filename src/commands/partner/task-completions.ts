@@ -1,7 +1,10 @@
 import { Command } from 'commander'
+import chalk from 'chalk'
 import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../../api-client'
 import { printList, printObject, printBanner } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
+import { htmlToText } from '../../html'
+import { parseDataFlag, deepMerge } from '../../data-flag'
 
 const LIST_COLS = ['id', 'label', 'task_id', 'enabled', 'completed_at', 'due_at', 'overdue', 'created_at']
 
@@ -41,20 +44,41 @@ export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
       const response = await withSpinner('Fetching task assignment...', () =>
         client.get(`/api/v1/e/${event}/p/${partnership}/partner/task_completions/${id}`)
       )
-      printObject(response.data, { json: g.json })
+
+      const description = (response.data as { task?: { description?: string } })?.task?.description
+
+      if (g.json) {
+        printObject(response.data, { json: true })
+        return
+      }
+
+      // Render the table without the (potentially massive) HTML description,
+      // then print the description as plain text underneath.
+      const data = response.data as Record<string, unknown>
+      const taskCopy = data.task ? { ...(data.task as Record<string, unknown>) } : null
+      if (taskCopy) delete taskCopy.description
+      const forTable = { ...data, task: taskCopy ?? data.task }
+      printObject(forTable, { json: false })
+
+      if (description) {
+        console.log('\n' + chalk.bold.cyan('Description'))
+        console.log(htmlToText(description))
+      }
     })
 
   tcCmd
     .command('update <id>')
     .description("Update a task assignment")
     .option('--due-at <datetime>', 'Override due date (ISO 8601)')
+    .option('--data <json>', "Power-user: extra task_completion attributes as JSON or @file (e.g. custom_field_values_attributes)")
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const body: Record<string, unknown> = {}
+      let body: Record<string, unknown> = {}
       if (opts.dueAt) body.due_at = opts.dueAt
+      if (opts.data) body = deepMerge(body, parseDataFlag(opts.data))
       const response = await withSpinner('Updating task assignment...', () =>
         client.patch(`/api/v1/e/${event}/p/${partnership}/partner/task_completions/${id}`, { task_completion: body })
       )

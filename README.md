@@ -19,7 +19,9 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [auth](#auth)
   - [config](#config)
   - [whoami](#whoami)
+  - [dashboard](#dashboard)
   - [my-events](#my-events)
+  - [my-organizations](#my-organizations)
   - [events](#events)
   - [partnerships](#partnerships)
   - [org-partnerships](#org-partnerships)
@@ -320,23 +322,66 @@ phq config unset test
 
 ### whoami
 
-Show your full current CLI context at a glance.
+Show your full current CLI context at a glance, including which user the stored token belongs to. When authenticated, `whoami` calls `GET /api/v1/me` to fetch identity (name, email, user ID, admin flag); on network failure or rejected tokens it degrades to a local-only view rather than exiting with an error.
 
 ```bash
 phq whoami [--json]
 ```
 
 ```
-┌───────────────┬────────────────────────────────────────┐
-│ Environment   │ production (https://app.partnerhq.com) │
-├───────────────┼────────────────────────────────────────┤
-│ Authenticated │ ✓ abc12345...xyz9                      │
-├───────────────┼────────────────────────────────────────┤
-│ Event         │ acme-summit-2025                       │
-├───────────────┼────────────────────────────────────────┤
-│ Partnership   │ 42                                     │
-└───────────────┴────────────────────────────────────────┘
+┌──────────────┬───────────────────────────────┐
+│ Logged in as │ Jane Smith <jane@example.com> │
+├──────────────┼───────────────────────────────┤
+│ User ID      │ 200                           │
+├──────────────┼───────────────────────────────┤
+│ Admin        │ —                             │
+└──────────────┴───────────────────────────────┘
+┌─────────────┬────────────────────────────────────────┐
+│ Environment │ production (https://app.partnerhq.com) │
+├─────────────┼────────────────────────────────────────┤
+│ Token       │ ✓ abc12345...xyz9                      │
+├─────────────┼────────────────────────────────────────┤
+│ Event       │ acme-summit-2025                       │
+├─────────────┼────────────────────────────────────────┤
+│ Partnership │ 42                                     │
+└─────────────┴────────────────────────────────────────┘
 ```
+
+The `--json` form returns the same data as a structured object — useful in CI/scripting:
+
+```json
+{
+  "environment": "production",
+  "base_url": "https://app.partnerhq.com",
+  "authenticated": true,
+  "identity": { "id": 200, "name": "Jane Smith", "email": "jane@example.com", "admin": false },
+  "identity_error": null,
+  "event": "acme-summit-2025",
+  "partnership": "42"
+}
+```
+
+If the API is unreachable or the token is rejected, `identity` is `null` and `identity_error` describes why — `authenticated: true` still indicates a token is stored locally.
+
+---
+
+### dashboard
+
+Show **your dashboard** for the current event — every task completion assigned to you across all task types (ToDos, Resources, and, for hosts, Internal Tasks). Internally calls `partner task-completions list?type=all`, so the response always includes a `task_type` column to distinguish each row's type. Requires `--event` and `--partnership` (or saved config defaults).
+
+```bash
+phq dashboard [--filter <predicate=value>] [--page N] [--per-page N] [--sort <predicate>] [--json]
+```
+
+```bash
+# Just my open assignments in the current event
+phq dashboard --filter "completed_at_null=true"
+
+# Sorted by due date
+phq dashboard --sort "due_at asc"
+```
+
+Columns: `id`, `task_type`, `label`, `task_id`, `enabled`, `completed_at`, `due_at`, `overdue`, `created_at`.
 
 ---
 
@@ -346,6 +391,16 @@ List all events the authenticated user belongs to (no event/partnership context 
 
 ```bash
 phq my-events list [--page N] [--per-page N] [--json]
+```
+
+---
+
+### my-organizations
+
+List all organizations the authenticated user is a member of (no event/partnership context required). Returns each organization's `id`, `name`, `permalink`, plus the `owner` (whether the user owns the organization) and `current` (whether it's the user's currently active organization) flags. Use the `organization_id` values when creating a new event — `owner_organization_id` must reference an organization the user belongs to.
+
+```bash
+phq my-organizations list [--page N] [--per-page N] [--json]
 ```
 
 ---
@@ -693,19 +748,31 @@ phq partner task-completions complete <id>   --event <permalink> --partnership <
 phq partner task-completions reset    <id>   --event <permalink> --partnership <id>
 ```
 
+`get` returns the assignment's metadata along with the underlying task, including the task's `description`. The description is rich-text HTML; in default (table) mode the CLI strips the HTML and prints the description as readable plain text below the main table. With `--json` the raw HTML is preserved so consumers can render it themselves.
+
+`update` accepts `--due-at` for the due date and `--data <json>` (or `@file.json`) for everything else, including custom field values:
+
+```bash
+# Update a few custom field values in one call
+phq partner task-completions update 286826 --data '{"custom_field_values_attributes":[{"id":115507,"value":"Mint chocolate chip"},{"id":115512,"value":[]}]}'
+```
+
+Where `id` is the `custom_field_values[].id` returned by `get`. CheckboxGroup fields take an array; all other types take a scalar.
+
 ---
 
 ### partner chat
 
-Read and write chat channels you have access to as a partner.
+Read and write chat channels you have access to as a partner. Use `list` to discover channel identifiers, then `show`/`messages`/`send` against a specific identifier.
 
 ```bash
+phq partner chat list                    --event <permalink> --partnership <id> [--type partnership|task_completion] [--page N] [--per-page N]
 phq partner chat show     <identifier>   --event <permalink> --partnership <id>
 phq partner chat messages <identifier>   --event <permalink> --partnership <id> [--page N] [--per-page N]
 phq partner chat send     <identifier>   --event <permalink> --partnership <id> --text "Hello team!"
 ```
 
-The `<identifier>` is the channel identifier from the API. Find it via the web UI or from the `partnerships_with_access` field returned by `phq partner chat show`.
+`list` returns every chat channel the caller has access to in the project: their own partnership channel (the "Project chat" / dashboard chat) plus the chat channels for any task completions belonging to their organizations. Hosts see every channel in the project. Each row carries an `identifier` (use it with the other subcommands), the `channelable_type` (`Partnership` or `TaskCompletion`), the `channelable_id`, a human-readable `label`, and — for `TaskCompletion` rows — `task_completion_id` and `task_type` so callers can filter or scope.
 
 ---
 
