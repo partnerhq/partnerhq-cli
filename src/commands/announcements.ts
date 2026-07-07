@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import { Command } from 'commander'
 import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
 import { printList, printObject, printSuccess, printBanner } from '../output'
@@ -105,4 +107,44 @@ export function registerAnnouncementsCommands(program: Command): void {
       )
       printSuccess(`Announcement ${id} deleted.`)
     })
+  cmd
+    .command('preview-email')
+    .description('Render the announcement email HTML without saving or sending')
+    .requiredOption('--text <html>', 'The announcement body (HTML)')
+    .option('--output <path>', 'Save the rendered HTML to a file')
+    .action(async (opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Rendering preview...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/announcements/preview_email`, {
+          announcement: { text: opts.text },
+        })
+      )
+      if (opts.output) {
+        fs.writeFileSync(path.resolve(opts.output), String(response.data))
+        printSuccess(`Wrote ${path.resolve(opts.output)}`)
+      } else {
+        console.log(String(response.data))
+      }
+    })
+
+  cmd
+    .command('send-test-email')
+    .description('Send the rendered announcement email to yourself with a [TEST] prefix')
+    .requiredOption('--text <html>', 'The announcement body (HTML)')
+    .action(async (opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Sending test email...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/announcements/send_test_email`, {
+          announcement: { text: opts.text },
+        })
+      )
+      printObject(response.data, { json: g.json })
+    })
+
 }

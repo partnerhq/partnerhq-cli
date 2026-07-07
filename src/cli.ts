@@ -20,6 +20,10 @@ import { registerAuthorizationsCommands } from './commands/authorizations'
 import { registerMessagesCommands } from './commands/messages'
 import { registerInvitationsCommands } from './commands/invitations'
 import { registerInboxCommands } from './commands/inbox'
+import { registerNotesCommands } from './commands/notes'
+import { registerTaskCompletionRulesCommands } from './commands/task-completion-rules'
+import { registerSelfRegistrationLinksCommands } from './commands/self-registration-links'
+import { registerCustomExportsCommands, registerTaskZipExportsCommands } from './commands/exports'
 import { registerPartnerProfileCommands } from './commands/partner/profile'
 import { registerPartnerOrgPartnershipsCommands } from './commands/partner/org-partnerships'
 import { registerPartnerTaskCompletionsCommands } from './commands/partner/task-completions'
@@ -63,6 +67,11 @@ registerAuthorizationsCommands(program)
 registerMessagesCommands(program)
 registerInvitationsCommands(program)
 registerInboxCommands(program)
+registerNotesCommands(program)
+registerTaskCompletionRulesCommands(program)
+registerSelfRegistrationLinksCommands(program)
+registerCustomExportsCommands(program)
+registerTaskZipExportsCommands(program)
 
 // Partner sub-commands — grouped under `partner`
 const partnerCmd = program

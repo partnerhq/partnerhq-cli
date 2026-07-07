@@ -35,6 +35,11 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [messages](#messages)
   - [invitations](#invitations)
   - [inbox](#inbox)
+  - [notes](#notes)
+  - [task-completion-rules](#task-completion-rules)
+  - [self-registration-links](#self-registration-links)
+  - [custom-exports](#custom-exports)
+  - [task-zip-exports](#task-zip-exports)
   - [partner profile](#partner-profile)
   - [partner org-partnerships](#partner-org-partnerships)
   - [partner task-completions](#partner-task-completions)
@@ -422,6 +427,7 @@ phq events update <permalink> [--name "New Name"] [--welcome-message "..."] [--b
 
 # Delete an event (will ask for confirmation)
 phq events delete <permalink>
+phq events archive <permalink>       # archive a project (irreversible via the API)
 
 # Skip confirmation (scripting)
 phq events delete <permalink> --yes
@@ -439,6 +445,14 @@ phq partnerships get    <id>   --event <permalink> --partnership <id>
 phq partnerships create --event <permalink> --partnership <id> --first-name <name> --last-name <name> --email <email> [--host] [--read-only] [--notes "..."]
 phq partnerships update <id>   --event <permalink> --partnership <id> [--first-name <name>] [--email <email>] [--host true|false] [--read-only true|false]
 phq partnerships delete <id>   --event <permalink> --partnership <id>
+
+# Individual lifecycle actions
+phq partnerships reset-welcome-message <id> --event <permalink> --partnership <id>
+phq partnerships disconnect-user       <id> --event <permalink> --partnership <id>
+
+# Bulk-import individuals from CSV (same template as the web Import button;
+# processed in the background, results emailed to you)
+phq partnerships import --file individuals.csv --event <permalink> --partnership <id>
 
 # Find or create by name + email (idempotent)
 phq partnerships retrieve --event <permalink> --partnership <id> --first-name <name> --last-name <name> --email <email>
@@ -471,6 +485,9 @@ phq org-partnerships retrieve --event <permalink> --partnership <id> --name <nam
 # Approve or deny an organization pending approval (self-registration workflow)
 phq org-partnerships approve <id> --event <permalink> --partnership <id>
 phq org-partnerships deny    <id> --event <permalink> --partnership <id> [--reason <text>]
+
+# Archive / unarchive (toggles)
+phq org-partnerships toggle-archive <id> --event <permalink> --partnership <id>
 ```
 
 **Example filters:**
@@ -498,6 +515,7 @@ phq tasks get     <id>   --event <permalink> --partnership <id>
 phq tasks create  --event <permalink> --partnership <id> --label <label> [--description "..."] [--due-at "2025-06-01T00:00:00Z"] [--pinned] [--locked] [--advance] [--notify-hosts] [--go-to-link <url>] [--data <json|@file>]
 phq tasks update  <id>   --event <permalink> --partnership <id> [--label <label>] [--pinned true|false] [--locked true|false] [--data <json|@file>]
 phq tasks delete  <id>   --event <permalink> --partnership <id>
+phq tasks toggle-archive <id> --event <permalink> --partnership <id>
 ```
 
 **Example filters:**
@@ -540,6 +558,10 @@ phq resources get     <id>   --event <permalink> --partnership <id>
 phq resources create  --event <permalink> --partnership <id> --label <label> [--go-to-link <url>] [--go-to-link-instructions "..."] [--description "..."] [--pinned] [--locked] [--data <json|@file>]
 phq resources update  <id>   --event <permalink> --partnership <id> [--label <label>] [--go-to-link <url>] [--data <json|@file>]
 phq resources delete  <id>   --event <permalink> --partnership <id>
+phq resources toggle-archive <id> --event <permalink> --partnership <id>
+
+# Set display positions in bulk (map of resource ID to position)
+phq resources reorder --positions '{"500":1,"501":2}' --event <permalink> --partnership <id>
 ```
 
 Resources support the same filters as [tasks](#tasks) since they share the same underlying model.
@@ -572,6 +594,10 @@ phq announcements get     <id>   --event <permalink> --partnership <id>
 phq announcements create  --event <permalink> --partnership <id> --text "Message body" [--segment all|completed|incomplete|overdue] [--scheduled-at "2025-06-01T09:00:00Z"] [--notify all|task|tag|organization_partnership]
 phq announcements update  <id>   --event <permalink> --partnership <id> [--text "..."] [--segment "..."] [--scheduled-at "..."]
 phq announcements delete  <id>   --event <permalink> --partnership <id>
+
+# Authoring helpers (nothing saved or sent to partners)
+phq announcements preview-email   --text "<p>Big news!</p>" [--output preview.html] --event <permalink> --partnership <id>
+phq announcements send-test-email --text "<p>Big news!</p>" --event <permalink> --partnership <id>
 ```
 
 > **Note:** Omitting `--scheduled-at` sends the announcement immediately (`schedule_now: true`).
@@ -623,6 +649,14 @@ phq task-completions get      <id>   --event <permalink> --partnership <id>
 phq task-completions update   <id>   --event <permalink> --partnership <id> [--enabled true|false] [--due-at "..."] [--assigned-partnership-id <id>]
 phq task-completions complete <id>   --event <permalink> --partnership <id>
 phq task-completions reset    <id>   --event <permalink> --partnership <id>
+
+# Approval workflow (tasks with approval enabled)
+phq task-completions submit-for-approval <id> --event <permalink> --partnership <id>
+phq task-completions approve-submission  <id> [--note "..."] --event <permalink> --partnership <id>
+phq task-completions request-changes     <id> --note "..."   --event <permalink> --partnership <id>
+
+# Signature tasks: get the signed PDF (URL, or save with --output)
+phq task-completions download-signed-pdf <id> [--output signed.pdf] --event <permalink> --partnership <id>
 ```
 
 **Example filters:**
@@ -704,6 +738,14 @@ phq invitations create --event <permalink> --partnership <id> \
   --email <email> [--first-name <name>] [--last-name <name>] \
   [--host] [--read-only] [--organization <name>]... [--data <json|@file>]
 phq invitations resend <id> --event <permalink> --partnership <id>
+phq invitations delete <id> --event <permalink> --partnership <id>   # cancel a pending invitation
+
+# Invite an EXISTING individual (created earlier without an invitation)
+phq invitations create --memberable-id <partnership_id> --event <permalink> --partnership <id>
+
+# Bulk actions (queued in the background, like the web UI buttons)
+phq invitations bulk-create --event <permalink> --partnership <id>   # invite everyone uninvited
+phq invitations bulk-resend --event <permalink> --partnership <id>   # re-send all pending
 ```
 
 `create` creates the partnership and emails the invitation, exactly like "Invite"
@@ -754,6 +796,85 @@ to parent nodes.
 
 ---
 
+### notes
+
+Host-only internal notes on tasks, resources, internal tasks, individuals, and
+organizations. Partners never see notes; only the author can delete their own.
+
+```bash
+phq notes list   --notable-type Task --notable-id 400 --event <permalink> --partnership <id>
+phq notes create --notable-type Partnership --notable-id 202 --content "Call about parking" \
+  [--attachment ./contract.pdf] --event <permalink> --partnership <id>
+phq notes delete <id> --event <permalink> --partnership <id>
+```
+
+`--notable-type` is one of `Task`, `Resource`, `InternalTask`, `Partnership`,
+`OrganizationPartnership`.
+
+---
+
+### task-completion-rules
+
+Auto-tagging rules on a task: when an organization's submitted answer for a custom
+field matches, the tag is applied. Pass the parent with `--task <id>` or
+`--internal-task <id>`.
+
+```bash
+phq task-completion-rules list   --task 400 --event <permalink> --partnership <id>
+phq task-completion-rules create --task 400 --custom-field 55 --operator equals \
+  --value "Yes" --tag 7 --event <permalink> --partnership <id>
+phq task-completion-rules update <id> --task 400 --enabled false --event <permalink> --partnership <id>
+phq task-completion-rules delete <id> --task 400 --event <permalink> --partnership <id>
+```
+
+---
+
+### self-registration-links
+
+Shareable sign-up URLs (Settings → Self Registration). The public URL is
+`/e/<event>/t/<token>`.
+
+```bash
+phq self-registration-links list   --event <permalink> --partnership <id>
+phq self-registration-links get    <id> --event <permalink> --partnership <id>
+phq self-registration-links create --name "Vendor Sign-Up" [--join-org <id>] \
+  [--require-approval true] [--notify-hosts true] [--limit 50] [--blurb "..."] \
+  [--data '{"tag_ids":[1,2]}'] --event <permalink> --partnership <id>
+phq self-registration-links update <id> [--name "..."] [...] --event <permalink> --partnership <id>
+phq self-registration-links delete <id> --event <permalink> --partnership <id>
+```
+
+---
+
+### custom-exports
+
+CSV exports of the project's organizations with the custom-field columns you choose
+(the web Export Builder). Generated in the background and emailed; poll with `get`,
+fetch with `download`.
+
+```bash
+phq custom-exports create [--custom-field 55 --custom-field 56] [--include-users] \
+  [--memo "Quarterly pull"] --event <permalink> --partnership <id>
+phq custom-exports get      <token> --event <permalink> --partnership <id>   # processing | ready
+phq custom-exports download <token> [--output export.csv] --event <permalink> --partnership <id>
+```
+
+---
+
+### task-zip-exports
+
+Bundle every submitted file for a task, an organization, or a single task
+completion into a ZIP (the web "Download all files" action).
+
+```bash
+phq task-zip-exports create --exportable-type Task --exportable-id 400 \
+  --event <permalink> --partnership <id>
+phq task-zip-exports get      <token> --event <permalink> --partnership <id>   # processing | ready
+phq task-zip-exports download <token> [--output files.zip] --event <permalink> --partnership <id>
+```
+
+---
+
 ### partner profile
 
 View and update your own profile as a partner within an event.
@@ -791,6 +912,11 @@ phq partner task-completions get      <id>   --event <permalink> --partnership <
 phq partner task-completions update   <id>   --event <permalink> --partnership <id> [--due-at "..."]
 phq partner task-completions complete <id>   --event <permalink> --partnership <id>
 phq partner task-completions reset    <id>   --event <permalink> --partnership <id>
+
+# Approval workflow (tasks with approval enabled)
+phq partner task-completions submit-for-approval <id> --event <permalink> --partnership <id>
+phq partner task-completions approve-submission  <id> [--note "..."] --event <permalink> --partnership <id>
+phq partner task-completions request-changes     <id> --note "..."   --event <permalink> --partnership <id>
 ```
 
 `get` returns the assignment's metadata along with the underlying task, including the task's `description`. The description is rich-text HTML; in default (table) mode the CLI strips the HTML and prints the description as readable plain text below the main table. With `--json` the raw HTML is preserved so consumers can render it themselves.

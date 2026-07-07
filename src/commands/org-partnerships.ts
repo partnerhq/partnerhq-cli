@@ -142,4 +142,18 @@ export function registerOrgPartnershipsCommands(program: Command): void {
       )
       printObject(response.data, { json: g.json })
     })
+  cmd
+    .command('toggle-archive <id>')
+    .description('Archive or unarchive (toggles the current state)')
+    .action(async (id, _opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Toggling archive...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/organization_partnerships/${id}/toggle_archive`)
+      )
+      printObject(response.data, { json: g.json })
+    })
+
 }
