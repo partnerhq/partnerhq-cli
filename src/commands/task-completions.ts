@@ -129,7 +129,11 @@ export function registerTaskCompletionsCommands(program: Command): void {
             ? 'Approve the pending submission (optional --note)'
             : 'Send the submission back with required change notes (--note)'
       )
-      .option('--note <text>', noteRequired ? 'Feedback for the submitter (required)' : 'Optional note')
+    if (noteRequired) {
+      sub.requiredOption('--note <text>', 'Feedback for the submitter (required)')
+    } else {
+      sub.option('--note <text>', 'Optional note')
+    }
     sub.action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)

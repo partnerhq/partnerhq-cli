@@ -60,8 +60,8 @@ export function registerCustomExportsCommands(program: Command): void {
       printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const body: Record<string, unknown> = {}
-      if (opts.customField.length > 0) body.custom_field_ids = opts.customField
+      // custom_field_ids always present so params.require(:custom_export) passes
+      const body: Record<string, unknown> = { custom_field_ids: opts.customField }
       if (opts.includeUsers) body.include_users = true
       if (opts.memo) body.memo = opts.memo
       const response = await withSpinner('Scheduling export...', () =>

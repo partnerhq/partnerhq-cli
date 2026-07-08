@@ -3,9 +3,24 @@ import { createClient, withSpinner } from '../api-client'
 import { printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 
-// Tree shape (Host::InboxTreePresenter): {individuals: [{label, thread, groups: {tasks:[], resources:[], internal_tasks:[]}, organizations: [...], unread, flagged}]}
-// where thread = {chatChannelId, identifier, label, unread, flagged}
+// Tree shape (Host::InboxTreePresenter): {individuals: [{label, thread, groups, organizations, unread, flagged}]}
+// where thread = {chatChannelId, identifier, label, unread, flagged}; groups (tasks/resources/
+// internal_tasks/assets) contain thread nodes DIRECTLY (no nested .thread); organizations
+// nest the same node shape recursively.
+function threadLine(thread: Record<string, unknown>, depth: number): string {
+  const badge = [
+    ((thread.unread as number) ?? 0) > 0 ? `${thread.unread} unread` : '',
+    thread.flagged ? 'flagged' : '',
+  ].filter(Boolean).join(', ')
+  return `${'  '.repeat(depth)}${thread.label || 'Comments'}  channel=${thread.chatChannelId}  [${thread.identifier}]${badge ? `  (${badge})` : ''}`
+}
+
 function walkNode(node: Record<string, unknown>, depth: number, lines: string[]): void {
+  if (node.identifier && node.chatChannelId) {
+    lines.push(threadLine(node, depth))
+    return
+  }
+
   const label = (node.label || node.name || '') as string
   const unread = (node.unread ?? 0) as number
   const flagged = (node.flagged ?? false) as boolean
@@ -13,10 +28,7 @@ function walkNode(node: Record<string, unknown>, depth: number, lines: string[])
   if (label) lines.push(`${'  '.repeat(depth)}${label}${badge ? `  (${badge})` : ''}`)
 
   const thread = node.thread as Record<string, unknown> | undefined
-  if (thread?.identifier) {
-    const tBadge = [(thread.unread as number) > 0 ? `${thread.unread} unread` : '', thread.flagged ? 'flagged' : ''].filter(Boolean).join(', ')
-    lines.push(`${'  '.repeat(depth + 1)}${thread.label || 'Comments'}  channel=${thread.chatChannelId}  [${thread.identifier}]${tBadge ? `  (${tBadge})` : ''}`)
-  }
+  if (thread?.identifier) lines.push(threadLine(thread, depth + 1))
 
   const groups = node.groups as Record<string, unknown> | undefined
   if (groups) {

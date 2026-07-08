@@ -63,6 +63,9 @@ export function registerInvitationsCommands(program: Command): void {
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       if (opts.memberableId) {
+        if (opts.email || opts.firstName || opts.lastName || opts.data) {
+          console.error('--memberable-id invites an existing individual; --email/--first-name/--last-name/--data are ignored')
+        }
         const response = await withSpinner('Sending invitation...', () =>
           client.post(`/api/v1/e/${event}/p/${partnership}/invitations`, { memberable_id: opts.memberableId })
         )

@@ -25,13 +25,19 @@ export function registerTaskCompletionRulesCommands(program: Command): void {
     .command('task-completion-rules')
     .description('Auto-tagging rules on tasks (tag an org when a field matches)')
 
-  parentOpts(cmd.command('list').description('List rules on a task')).action(async (opts, cmd) => {
+  parentOpts(
+    cmd
+      .command('list')
+      .description('List rules on a task')
+      .option('--page <n>', 'Page number', '1')
+      .option('--per-page <n>', 'Results per page (max 250)', '30')
+  ).action(async (opts, cmd) => {
     const g = getGlobalOpts(cmd)
     printBanner(g.test, g.json)
     const { event, partnership } = requireEventAndPartnership(g)
     const client = createClient({ test: g.test })
     const response = await withSpinner('Fetching rules...', () =>
-      client.get(basePath(event, partnership, opts))
+      client.get(basePath(event, partnership, opts), { params: { page: opts.page, per_page: opts.perPage } })
     )
     printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
   })

@@ -15,6 +15,58 @@ export interface ApiOptions {
   test: boolean
 }
 
+function attachErrorInterceptor(client: AxiosInstance, opts: ApiOptions): void {
+  client.interceptors.response.use(
+    (response) => response,
+    (error: AxiosError) => {
+      if (error.response) {
+        const status = error.response.status
+        const data = error.response.data as Record<string, unknown>
+
+        if (status === 401) {
+          const loginCmd = opts.test ? "'phq auth login --test'" : "'phq auth login'"
+          console.error(chalk.red('\u2717') + ` Unauthorized. Run ${chalk.cyan(loginCmd)} to re-authenticate.`)
+          process.exit(1)
+        }
+
+        if (status === 404) {
+          // Surface specific 404 messages (e.g. "Export is still processing");
+          // keep the context hint for the generic record-lookup miss.
+          if (typeof data?.error === 'string' && data.error !== 'Record Not Found') {
+            console.error(chalk.red('\u2717') + ` ${data.error}`)
+            process.exit(1)
+          }
+          console.error(
+            chalk.red('\u2717') + ' Resource not found.\n' +
+            chalk.dim(
+              '  Hint: Your --event or --partnership may be incorrect for this environment.\n' +
+              "  Run 'phq whoami' to check your current context, or\n" +
+              "  'phq my-events list' to find your correct event permalink and partnership ID."
+            )
+          )
+          process.exit(1)
+        }
+
+        const errors = data?.errors ?? data?.error ?? data
+        const label = status >= 500 ? 'Server error' : 'Request failed'
+        console.error(chalk.red('\u2717') + ` ${label} (${status}):`, JSON.stringify(errors, null, 2))
+        process.exit(1)
+      } else if (error.request) {
+        if (opts.test && (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND')) {
+          console.error(
+            chalk.red('\u2717') +
+            ` Could not connect to ${chalk.bold('http://phq.test')}. Is your local server running?`
+          )
+        } else {
+          console.error(chalk.red('\u2717') + ' No response received from server. Check your network connection.')
+        }
+        process.exit(1)
+      }
+      return Promise.reject(error)
+    }
+  )
+}
+
 export function createClient(opts: ApiOptions): AxiosInstance {
   const env = resolveEnvironment(opts.test)
   const token = getToken(env)
@@ -37,49 +89,7 @@ export function createClient(opts: ApiOptions): AxiosInstance {
     },
   })
 
-  client.interceptors.response.use(
-    (response) => response,
-    (error: AxiosError) => {
-      if (error.response) {
-        const status = error.response.status
-        const data = error.response.data as Record<string, unknown>
-
-        if (status === 401) {
-          const loginCmd = opts.test ? "'phq auth login --test'" : "'phq auth login'"
-          console.error(chalk.red('✗') + ` Unauthorized. Run ${chalk.cyan(loginCmd)} to re-authenticate.`)
-          process.exit(1)
-        }
-
-        if (status === 404) {
-          console.error(
-            chalk.red('✗') + ' Resource not found.\n' +
-            chalk.dim(
-              '  Hint: Your --event or --partnership may be incorrect for this environment.\n' +
-              "  Run 'phq whoami' to check your current context, or\n" +
-              "  'phq my-events list' to find your correct event permalink and partnership ID."
-            )
-          )
-          process.exit(1)
-        }
-
-        const errors = data?.errors ?? data?.error ?? data
-        const label = status >= 500 ? 'Server error' : 'Request failed'
-        console.error(chalk.red('✗') + ` ${label} (${status}):`, JSON.stringify(errors, null, 2))
-        process.exit(1)
-      } else if (error.request) {
-        if (opts.test && (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND')) {
-          console.error(
-            chalk.red('✗') +
-            ` Could not connect to ${chalk.bold('http://phq.test')}. Is your local server running?`
-          )
-        } else {
-          console.error(chalk.red('✗') + ' No response received from server. Check your network connection.')
-        }
-        process.exit(1)
-      }
-      return Promise.reject(error)
-    }
-  )
+  attachErrorInterceptor(client, opts)
 
   return client
 }
@@ -158,52 +168,7 @@ export function createMultipartClient(opts: ApiOptions): AxiosInstance {
     maxContentLength: Infinity,
   })
 
-  client.interceptors.response.use(
-    (response) => response,
-    (error: AxiosError) => {
-      if (error.response) {
-        const status = error.response.status
-        const data = error.response.data as Record<string, unknown>
-        if (status === 401) {
-          const loginCmd = opts.test ? "'phq auth login --test'" : "'phq auth login'"
-          console.error(chalk.red('✗') + ` Unauthorized. Run ${chalk.cyan(loginCmd)} to re-authenticate.`)
-          process.exit(1)
-        }
-        if (status === 404) {
-          console.error(
-            chalk.red('✗') + ' Resource not found.\n' +
-            chalk.dim(
-              '  Hint: Your --event or --partnership may be incorrect for this environment.\n' +
-              "  Run 'phq whoami' to check your current context, or\n" +
-              "  'phq my-events list' to find your correct event permalink and partnership ID."
-            )
-          )
-          process.exit(1)
-        }
-        if (status === 400) {
-          const errors = data?.errors ?? data?.error ?? data
-          console.error(chalk.red('✗') + ' Bad request:', JSON.stringify(errors, null, 2))
-          process.exit(1)
-        }
-        if (status === 500) {
-          const errors = data?.errors ?? data?.error ?? 'Internal server error'
-          console.error(chalk.red('✗') + ' Server error:', JSON.stringify(errors, null, 2))
-          process.exit(1)
-        }
-      } else if (error.request) {
-        if (opts.test && (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND')) {
-          console.error(
-            chalk.red('✗') +
-            ` Could not connect to ${chalk.bold('http://phq.test')}. Is your local server running?`
-          )
-        } else {
-          console.error(chalk.red('✗') + ' No response received from server. Check your network connection.')
-        }
-        process.exit(1)
-      }
-      return Promise.reject(error)
-    }
-  )
+  attachErrorInterceptor(client, opts)
 
   return client
 }
