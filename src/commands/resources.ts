@@ -127,4 +127,34 @@ export function registerResourcesCommands(program: Command): void {
       )
       printSuccess(`Resource ${id} deleted.`)
     })
+  cmd
+    .command('toggle-archive <id>')
+    .description('Archive or unarchive (toggles the current state)')
+    .action(async (id, _opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Toggling archive...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/resources/${id}/toggle_archive`)
+      )
+      printObject(response.data, { json: g.json })
+    })
+
+  cmd
+    .command('reorder')
+    .description('Set display positions in bulk')
+    .requiredOption('--positions <json>', 'Map of resource ID to position, e.g. \'{"500":1,"501":2}\'')
+    .action(async (opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const positions = parseDataFlag(opts.positions)
+      const response = await withSpinner('Reordering resources...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/resources/reorder`, { positions })
+      )
+      printObject(response.data, { json: g.json })
+    })
+
 }

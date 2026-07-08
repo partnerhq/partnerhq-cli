@@ -76,4 +76,18 @@ export function registerEventsCommands(program: Command): void {
       )
       printSuccess(`Event '${permalink}' deleted.`)
     })
+  events
+    .command('archive <permalink>')
+    .description('Archive a project (cannot be undone via the API)')
+    .action(async (permalink, _opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Archive project ${permalink}?`)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Archiving project...', () =>
+        client.post(`/api/v1/events/${permalink}/archive`)
+      )
+      printObject(response.data, { json: g.json })
+    })
+
 }

@@ -62,17 +62,10 @@ export function createClient(opts: ApiOptions): AxiosInstance {
           process.exit(1)
         }
 
-        if (status === 400) {
-          const errors = data?.errors ?? data?.error ?? data
-          console.error(chalk.red('✗') + ' Bad request:', JSON.stringify(errors, null, 2))
-          process.exit(1)
-        }
-
-        if (status === 500) {
-          const errors = data?.errors ?? data?.error ?? 'Internal server error'
-          console.error(chalk.red('✗') + ' Server error:', JSON.stringify(errors, null, 2))
-          process.exit(1)
-        }
+        const errors = data?.errors ?? data?.error ?? data
+        const label = status >= 500 ? 'Server error' : 'Request failed'
+        console.error(chalk.red('✗') + ` ${label} (${status}):`, JSON.stringify(errors, null, 2))
+        process.exit(1)
       } else if (error.request) {
         if (opts.test && (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND')) {
           console.error(

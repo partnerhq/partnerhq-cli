@@ -112,4 +112,33 @@ export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
       )
       printObject(response.data, { json: g.json })
     })
+  for (const [cliName, apiAction, label, noteRequired] of [
+    ['submit-for-approval', 'submit_for_approval', 'Submitting for approval', false],
+    ['approve-submission', 'approve_submission', 'Approving submission', false],
+    ['request-changes', 'request_changes', 'Requesting changes', true],
+  ] as [string, string, string, boolean][]) {
+    const sub = tcCmd
+      .command(`${cliName} <id>`)
+      .description(
+        cliName === 'submit-for-approval'
+          ? 'Submit a completed-work review request on an approval task'
+          : cliName === 'approve-submission'
+            ? 'Approve the pending submission (optional --note)'
+            : 'Send the submission back with required change notes (--note)'
+      )
+      .option('--note <text>', noteRequired ? 'Feedback for the submitter (required)' : 'Optional note')
+    sub.action(async (id, opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const body: Record<string, unknown> = {}
+      if (opts.note) body.note = opts.note
+      const response = await withSpinner(`${label}...`, () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/partner/task_completions/${id}/${apiAction}`, body)
+      )
+      printObject(response.data, { json: g.json })
+    })
+  }
+
 }

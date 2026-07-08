@@ -1,8 +1,12 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
+import { createClient, createMultipartClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
 import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 import { confirmOrExit } from '../prompt'
+import fs from 'fs'
+import path from 'path'
+import FormData from 'form-data'
+import chalk from 'chalk'
 
 const LIST_COLS = ['id', 'first_name', 'last_name', 'email', 'host', 'read_only', 'created_at']
 
@@ -132,4 +136,63 @@ export function registerPartnershipsCommands(program: Command): void {
       )
       printObject(response.data, { json: g.json })
     })
+  cmd
+    .command('reset-welcome-message <id>')
+    .description("Reset an individual's automated welcome message")
+    .action(async (id, _opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Resetting welcome message...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/partnerships/${id}/reset_welcome_message`)
+      )
+      printObject(response.data, { json: g.json })
+    })
+
+  cmd
+    .command('disconnect-user <id>')
+    .description("Remove the connected user from an individual's partnership (keeps the record + history)")
+    .action(async (id, _opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      if (!g.yes) await confirmOrExit(`Disconnect the user from partnership ${id}?`)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Disconnecting user...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/partnerships/${id}/disconnect_user`)
+      )
+      printObject(response.data, { json: g.json })
+    })
+
+  cmd
+    .command('import')
+    .description('Bulk-import individuals from a CSV (same template as the Import button)')
+    .requiredOption('--file <path>', 'Local path to the CSV file')
+    .action(async (opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+
+      const filePath = path.resolve(opts.file)
+      if (!fs.existsSync(filePath)) {
+        console.error(chalk.red('✗') + ` File not found: ${filePath}`)
+        process.exit(1)
+      }
+
+      const form = new FormData()
+      form.append('event_upload[upload_type]', 'bulk_partnership_upload')
+      form.append('event_upload[file]', fs.createReadStream(filePath), {
+        filename: path.basename(filePath),
+      })
+
+      const client = createMultipartClient({ test: g.test })
+      const response = await withSpinner('Uploading CSV...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/event_uploads`, form, {
+          headers: form.getHeaders(),
+        })
+      )
+      printObject(response.data, { json: g.json })
+    })
+
 }

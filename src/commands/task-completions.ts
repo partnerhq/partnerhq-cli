@@ -1,6 +1,7 @@
 import { Command } from 'commander'
-import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../api-client'
-import { printList, printObject, printBanner } from '../output'
+import path from 'path'
+import { createClient, buildFilterParams, getRedirectLocation, downloadToFile, PaginatedResponse, withSpinner } from '../api-client'
+import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 
 const LIST_COLS = ['id', 'task_id', 'partnerable_type', 'partnerable_id', 'enabled', 'completed_at', 'due_at', 'created_at']
@@ -92,4 +93,55 @@ export function registerTaskCompletionsCommands(program: Command): void {
       )
       printObject(response.data, { json: g.json })
     })
+  cmd
+    .command('download-signed-pdf <id>')
+    .description('Get the signed document URL for a signature task (or save it with --output)')
+    .option('--output <path>', 'Local path to save the PDF')
+    .action(async (id, opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const url = await getRedirectLocation(
+        client,
+        `/api/v1/e/${event}/p/${partnership}/task_completions/${id}/download_signed_pdf`
+      )
+      if (!opts.output) {
+        console.log(url)
+        return
+      }
+      const outputPath = path.resolve(opts.output)
+      await downloadToFile(url, outputPath)
+      printSuccess(`Wrote ${outputPath}`)
+    })
+
+  for (const [cliName, apiAction, label, noteRequired] of [
+    ['submit-for-approval', 'submit_for_approval', 'Submitting for approval', false],
+    ['approve-submission', 'approve_submission', 'Approving submission', false],
+    ['request-changes', 'request_changes', 'Requesting changes', true],
+  ] as [string, string, string, boolean][]) {
+    const sub = cmd
+      .command(`${cliName} <id>`)
+      .description(
+        cliName === 'submit-for-approval'
+          ? 'Submit a completed-work review request on an approval task'
+          : cliName === 'approve-submission'
+            ? 'Approve the pending submission (optional --note)'
+            : 'Send the submission back with required change notes (--note)'
+      )
+      .option('--note <text>', noteRequired ? 'Feedback for the submitter (required)' : 'Optional note')
+    sub.action(async (id, opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const body: Record<string, unknown> = {}
+      if (opts.note) body.note = opts.note
+      const response = await withSpinner(`${label}...`, () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}/${apiAction}`, body)
+      )
+      printObject(response.data, { json: g.json })
+    })
+  }
+
 }
