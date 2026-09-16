@@ -3,8 +3,28 @@ import { createClient, withSpinner, PaginatedResponse } from '../../api-client'
 import { printList, printObject, printArray, printBanner } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
 
-const MESSAGE_COLS = ['id', 'created_at', 'partnership_id', 'text']
-const CHANNEL_LIST_COLS = ['identifier', 'channelable_type', 'channelable_id', 'label', 'task_completion_id', 'task_type']
+const MESSAGE_COLS = ['id', 'created_at', 'partnership_id', 'text', 'notes']
+const CHANNEL_LIST_COLS = ['identifier', 'channelable_type', 'channelable_id', 'label', 'task_completion_id', 'task_type', 'unread_count', 'flagged']
+
+/**
+ * Table rows for messages: deleted messages come back as tombstones
+ * (discarded_at set, text replaced with a notice), so flag them — and edits,
+ * replies and reactions — in a `notes` column.
+ */
+function messageRows(messages: Record<string, unknown>[]): Record<string, unknown>[] {
+  return messages.map((m) => {
+    const notes: string[] = []
+    if (m.discarded_at) notes.push('[deleted]')
+    else if (m.edited_at) notes.push('[edited]')
+    const replyTo = m.reply_to as { id?: number; name?: string } | null | undefined
+    if (replyTo?.id) notes.push(`reply to #${replyTo.id}${replyTo.name ? ` (${replyTo.name})` : ''}`)
+    const reactions = m.reactions as { emoji: string; count: number }[] | undefined
+    if (Array.isArray(reactions) && reactions.length > 0) {
+      notes.push(reactions.map((r) => `${r.emoji} ${r.count}`).join(' '))
+    }
+    return { ...m, notes: notes.length > 0 ? notes.join(' · ') : null }
+  })
+}
 
 export function registerPartnerChatCommands(cmd: Command): void {
   const chat = cmd
@@ -14,7 +34,7 @@ export function registerPartnerChatCommands(cmd: Command): void {
   chat
     .command('list')
     .description("List the chat channels you have access to (your partnership's channel + your task completions' channels)")
-    .option('--type <kind>', "Filter by channelable type: 'partnership' or 'task_completion'")
+    .option('--type <kind>', "Filter by channelable type: 'partnership', 'task_completion', or 'asset_assignment'")
     .option('--page <n>', 'Page number', '1')
     .option('--per-page <n>', 'Results per page (max 250)', '30')
     .action(async (opts, cmd) => {
@@ -32,7 +52,7 @@ export function registerPartnerChatCommands(cmd: Command): void {
 
   chat
     .command('show <identifier>')
-    .description('Show a chat channel and its latest 30 messages')
+    .description('Show a chat channel and its latest 30 messages (deleted messages appear as tombstones)')
     .action(async (identifier, _opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -61,7 +81,7 @@ export function registerPartnerChatCommands(cmd: Command): void {
       console.log('\nPartnerships with access:')
       printArray(data.partnerships_with_access ?? [], ['id', 'name'], { json: false })
       console.log('\nLatest messages:')
-      printArray(data.chat_channel_messages ?? [], MESSAGE_COLS, { json: false })
+      printArray(messageRows(data.chat_channel_messages ?? []), MESSAGE_COLS, { json: false })
     })
 
   chat
@@ -93,7 +113,7 @@ export function registerPartnerChatCommands(cmd: Command): void {
           has_more: boolean
         }
       }
-      printArray(data.messages, MESSAGE_COLS, { json: false })
+      printArray(messageRows(data.messages), MESSAGE_COLS, { json: false })
       const p = data.pagination
       console.log(
         `Page ${p.current_page} · ${data.messages.length} of ${p.total_entries} total (${p.per_page} per page)` +

@@ -3,7 +3,7 @@ import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from 
 import { printList, printObject, printBanner } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
 
-const LIST_COLS = ['id', 'name', 'host', 'archived_at', 'created_at']
+const LIST_COLS = ['id', 'name', 'host', 'created_at']
 
 export function registerPartnerOrgPartnershipsCommands(cmd: Command): void {
   const orgCmd = cmd
@@ -12,7 +12,7 @@ export function registerPartnerOrgPartnershipsCommands(cmd: Command): void {
 
   orgCmd
     .command('list')
-    .description("List organizations you belong to")
+    .description("List organizations you belong to (archived organizations are excluded; default sort: name)")
     .option('--filter <predicate=value>', 'Ransack filter (repeatable)', (v, a: string[]) => [...a, v], [] as string[])
     .option('--page <n>', 'Page number', '1')
     .option('--per-page <n>', 'Results per page (max 250)', '30')
