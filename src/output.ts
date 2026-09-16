@@ -127,6 +127,34 @@ export function printArray<T extends Record<string, unknown>>(
   console.log(table.toString())
 }
 
+/**
+ * Print a list endpoint's `counts` block (e.g. {active: 3, needs_approval: 1})
+ * as one dim line. No-op in JSON mode (the counts are already in the payload)
+ * or when the server did not send counts.
+ */
+export function printCounts(counts: unknown, opts: PrintOptions): void {
+  if (opts.json || counts === null || typeof counts !== 'object') return
+  const entries = Object.entries(counts as Record<string, unknown>)
+  if (entries.length === 0) return
+  console.log(chalk.dim('Counts: ' + entries.map(([k, v]) => `${k} ${v}`).join(' · ')))
+}
+
+/**
+ * Print a short-lived signed download URL. The URL goes to stdout (so it can
+ * be piped) and the expiry warning to stderr. JSON mode prints both as one object.
+ */
+export function printExpiringUrl(url: string, expiresInSeconds: number, opts: PrintOptions): void {
+  if (opts.json) {
+    console.log(JSON.stringify({ url, expires_in_seconds: expiresInSeconds }, null, 2))
+    return
+  }
+  const human = expiresInSeconds % 3600 === 0
+    ? `${expiresInSeconds / 3600} hour${expiresInSeconds === 3600 ? '' : 's'}`
+    : `${expiresInSeconds} seconds`
+  console.log(url)
+  console.error(chalk.yellow(`⚠ This link expires in ${human}. Use --output <path> to download the file directly.`))
+}
+
 export function printSuccess(message: string): void {
   console.log(chalk.green('✓') + ' ' + message)
 }

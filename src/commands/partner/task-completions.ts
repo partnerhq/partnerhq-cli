@@ -1,25 +1,52 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from '../../api-client'
-import { printList, printObject, printBanner } from '../../output'
+import { printList, printObject, printBanner, printCounts } from '../../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../../global-opts'
 import { htmlToText } from '../../html'
 import { parseDataFlag, deepMerge } from '../../data-flag'
+import { registerApprovalActions } from '../../approval-actions'
+import { taskCompletionStatus, withTaskCompletionStatus } from '../../task-status'
 
-const LIST_COLS = ['id', 'label', 'task_id', 'enabled', 'completed_at', 'due_at', 'overdue', 'created_at']
+const LIST_COLS = ['id', 'label', 'task_id', 'status', 'completed_at', 'due_at', 'overdue', 'created_at']
+
+/**
+ * Options shared by `partner task-completions list` and `dashboard` — both hit
+ * the partner task_completions index.
+ */
+export function addPartnerTaskCompletionListOptions(cmd: Command, defaultType?: string): Command {
+  return cmd
+    .option('--status <status>', 'Tab: active (default), assigned_to_me, needs_approval, awaiting_others, archived')
+    .option('--type <type>', `Task kind: tasks, resources, internal_tasks (hosts only), all (default: ${defaultType ?? 'tasks'})`)
+    .option('--organization <id>', 'Only this organization partnership id (ignored by the API if it is not one of yours)')
+    .option('--asset-assignment <id>', 'Only completions for this asset assignment (integer id)')
+}
+
+export function partnerTaskCompletionListParams(opts: Record<string, string | undefined>, defaultType?: string): Record<string, unknown> {
+  const params: Record<string, unknown> = {}
+  const type = opts.type ?? defaultType
+  // The API treats any value other than resources/internal_tasks/all as ToDos.
+  if (type && type !== 'tasks') params.type = type
+  if (opts.status) params.status = opts.status
+  if (opts.organization) params.organization_partnership_id = opts.organization
+  if (opts.assetAssignment) params.asset_assignment_id = opts.assetAssignment
+  return params
+}
 
 export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
   const tcCmd = cmd
     .command('task-completions')
     .description("Manage your own task assignments as a partner")
 
-  tcCmd
+  const list = tcCmd
     .command('list')
-    .description("List your task assignments")
-    .option('--filter <predicate=value>', 'Ransack filter (repeatable)', (v, a: string[]) => [...a, v], [] as string[])
+    .description("List your task assignments (the status column reflects approval state)")
+  addPartnerTaskCompletionListOptions(list)
+  list
+    .option('--filter <predicate=value>', 'Ransack filter (repeatable; currently ignored by the partner endpoint — use --status/--type)', (v, a: string[]) => [...a, v], [] as string[])
     .option('--page <n>', 'Page number', '1')
     .option('--per-page <n>', 'Results per page (max 250)', '30')
-    .option('--sort <predicate>', 'Sort column (e.g. due_at asc)')
+    .option('--sort <predicate>', 'Sort column (currently ignored by the partner endpoint, which uses a fixed order)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -28,9 +55,13 @@ export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
       const response = await withSpinner('Fetching task assignments...', () =>
-        client.get(`/api/v1/e/${event}/p/${partnership}/partner/task_completions`, { params: { q, page: opts.page, per_page: opts.perPage } })
+        client.get(`/api/v1/e/${event}/p/${partnership}/partner/task_completions`, {
+          params: { q, page: opts.page, per_page: opts.perPage, ...partnerTaskCompletionListParams(opts) },
+        })
       )
-      printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
+      const data = response.data as PaginatedResponse<Record<string, unknown>> & { counts?: unknown }
+      printList(g.json ? data : withTaskCompletionStatus(data), LIST_COLS, { json: g.json })
+      printCounts(data.counts, { json: g.json })
     })
 
   tcCmd
@@ -45,19 +76,23 @@ export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
         client.get(`/api/v1/e/${event}/p/${partnership}/partner/task_completions/${id}`)
       )
 
-      const description = (response.data as { task?: { description?: string } })?.task?.description
-
       if (g.json) {
         printObject(response.data, { json: true })
         return
       }
 
-      // Render the table without the (potentially massive) HTML description,
-      // then print the description as plain text underneath.
+      // Render the table without the (potentially massive) HTML descriptions,
+      // then print the description as plain text underneath. Prefer the
+      // rendered description (sanitized + tag-targeted copy) over the raw column.
       const data = response.data as Record<string, unknown>
-      const taskCopy = data.task ? { ...(data.task as Record<string, unknown>) } : null
-      if (taskCopy) delete taskCopy.description
-      const forTable = { ...data, task: taskCopy ?? data.task }
+      const task = data.task as { description?: string | null; rendered_description?: string | null } | undefined
+      const description = task?.rendered_description || task?.description
+      const taskCopy = task ? { ...(task as Record<string, unknown>) } : null
+      if (taskCopy) {
+        delete taskCopy.description
+        delete taskCopy.rendered_description
+      }
+      const forTable = { status: taskCompletionStatus(data), ...data, task: taskCopy ?? data.task }
       printObject(forTable, { json: false })
 
       if (description) {
@@ -112,33 +147,6 @@ export function registerPartnerTaskCompletionsCommands(cmd: Command): void {
       )
       printObject(response.data, { json: g.json })
     })
-  for (const [cliName, apiAction, label, noteRequired] of [
-    ['submit-for-approval', 'submit_for_approval', 'Submitting for approval', false],
-    ['approve-submission', 'approve_submission', 'Approving submission', false],
-    ['request-changes', 'request_changes', 'Requesting changes', true],
-  ] as [string, string, string, boolean][]) {
-    const sub = tcCmd
-      .command(`${cliName} <id>`)
-      .description(
-        cliName === 'submit-for-approval'
-          ? 'Submit a completed-work review request on an approval task'
-          : cliName === 'approve-submission'
-            ? 'Approve the pending submission (optional --note)'
-            : 'Send the submission back with required change notes (--note)'
-      )
-      .option('--note <text>', noteRequired ? 'Feedback for the submitter (required)' : 'Optional note')
-    sub.action(async (id, opts, cmd) => {
-      const g = getGlobalOpts(cmd)
-      printBanner(g.test, g.json)
-      const { event, partnership } = requireEventAndPartnership(g)
-      const client = createClient({ test: g.test })
-      const body: Record<string, unknown> = {}
-      if (opts.note) body.note = opts.note
-      const response = await withSpinner(`${label}...`, () =>
-        client.post(`/api/v1/e/${event}/p/${partnership}/partner/task_completions/${id}/${apiAction}`, body)
-      )
-      printObject(response.data, { json: g.json })
-    })
-  }
 
+  registerApprovalActions(tcCmd, (event, partnership) => `/api/v1/e/${event}/p/${partnership}/partner/task_completions`)
 }

@@ -1,10 +1,15 @@
 import { Command } from 'commander'
 import path from 'path'
 import { createClient, buildFilterParams, getRedirectLocation, downloadToFile, PaginatedResponse, withSpinner } from '../api-client'
-import { printList, printObject, printSuccess, printBanner } from '../output'
+import { printList, printObject, printSuccess, printBanner, printCounts, printExpiringUrl } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
+import { registerApprovalActions } from '../approval-actions'
+import { taskCompletionStatus, withTaskCompletionStatus } from '../task-status'
 
-const LIST_COLS = ['id', 'task_id', 'partnerable_type', 'partnerable_id', 'enabled', 'completed_at', 'due_at', 'created_at']
+const LIST_COLS = ['id', 'task_id', 'label', 'partnerable_id', 'status', 'enabled', 'completed_at', 'due_at', 'created_at']
+
+// SignatureRequest::SIGNED_PDF_TTL — applies to the signed PDF and the certificate.
+const SIGNED_PDF_URL_TTL_SECONDS = 3600
 
 export function registerTaskCompletionsCommands(program: Command): void {
   const cmd = program
@@ -13,22 +18,36 @@ export function registerTaskCompletionsCommands(program: Command): void {
 
   cmd
     .command('list')
-    .description('List all task completions in an event')
-    .option('--filter <predicate=value>', 'Ransack filter (repeatable)', (v, a: string[]) => [...a, v], [] as string[])
+    .description('List task completions in an event (the status column reflects approval state)')
+    .option('--task-id <id>', "Only this task's assignments (supports --filter 'label_cont=<org>' and 'status_in[]=...')")
+    .option('--status <status>', 'Approval queue: needs_approval or awaiting_others')
+    .option('--filter <predicate=value>', "Ransack filter (repeatable). With --task-id: status_in[]=open|completed|overdue|in_review|changes_requested|not_approved", (v, a: string[]) => [...a, v], [] as string[])
     .option('--page <n>', 'Page number', '1')
-    .option('--per-page <n>', 'Results per page (max 250)', '30')
-    .option('--sort <predicate>', 'Sort column (e.g. due_at asc)')
+    .option('--per-page <n>', 'Results per page (max 250; 100 with --task-id)', '30')
+    .option('--sort <predicate>', 'Sort column (e.g. due_at asc). With --task-id: activity or status')
+    .option('--direction <dir>', 'Sort direction for --task-id sorts: asc or desc')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
-      if (opts.sort) q.s = opts.sort
+      const params: Record<string, unknown> = { q, page: opts.page, per_page: opts.perPage }
+      if (opts.taskId) {
+        // The task-scoped listing sorts by its own sort/direction params, not Ransack's q[s].
+        params.task_id = opts.taskId
+        if (opts.sort) params.sort = opts.sort
+        if (opts.direction) params.direction = opts.direction
+      } else if (opts.sort) {
+        q.s = opts.sort
+      }
+      if (opts.status) params.status = opts.status
       const response = await withSpinner('Fetching task completions...', () =>
-        client.get(`/api/v1/e/${event}/p/${partnership}/task_completions`, { params: { q, page: opts.page, per_page: opts.perPage } })
+        client.get(`/api/v1/e/${event}/p/${partnership}/task_completions`, { params })
       )
-      printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
+      const data = response.data as PaginatedResponse<Record<string, unknown>> & { counts?: unknown }
+      printList(g.json ? data : withTaskCompletionStatus(data), LIST_COLS, { json: g.json })
+      printCounts(data.counts, { json: g.json })
     })
 
   cmd
@@ -42,7 +61,8 @@ export function registerTaskCompletionsCommands(program: Command): void {
       const response = await withSpinner('Fetching task completion...', () =>
         client.get(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}`)
       )
-      printObject(response.data, { json: g.json })
+      const data = response.data as Record<string, unknown>
+      printObject(g.json ? data : { status: taskCompletionStatus(data), ...data }, { json: g.json })
     })
 
   cmd
@@ -93,55 +113,32 @@ export function registerTaskCompletionsCommands(program: Command): void {
       )
       printObject(response.data, { json: g.json })
     })
-  cmd
-    .command('download-signed-pdf <id>')
-    .description('Get the signed document URL for a signature task (or save it with --output)')
-    .option('--output <path>', 'Local path to save the PDF')
-    .action(async (id, opts, cmd) => {
-      const g = getGlobalOpts(cmd)
-      printBanner(g.test, g.json)
-      const { event, partnership } = requireEventAndPartnership(g)
-      const client = createClient({ test: g.test })
-      const url = await getRedirectLocation(
-        client,
-        `/api/v1/e/${event}/p/${partnership}/task_completions/${id}/download_signed_pdf`
-      )
-      if (!opts.output) {
-        console.log(url)
-        return
-      }
-      const outputPath = path.resolve(opts.output)
-      await downloadToFile(url, outputPath)
-      printSuccess(`Wrote ${outputPath}`)
-    })
-
-  for (const [cliName, apiAction, label, noteRequired] of [
-    ['submit-for-approval', 'submit_for_approval', 'Submitting for approval', false],
-    ['approve-submission', 'approve_submission', 'Approving submission', false],
-    ['request-changes', 'request_changes', 'Requesting changes', true],
-  ] as [string, string, string, boolean][]) {
-    const sub = cmd
+  for (const [cliName, apiAction, label] of [
+    ['download-signed-pdf', 'download_signed_pdf', 'signed document'],
+    ['download-certificate', 'download_certificate', 'certificate of completion'],
+  ]) {
+    cmd
       .command(`${cliName} <id>`)
-      .description(
-        cliName === 'submit-for-approval'
-          ? 'Submit a completed-work review request on an approval task'
-          : cliName === 'approve-submission'
-            ? 'Approve the pending submission (optional --note)'
-            : 'Send the submission back with required change notes (--note)'
-      )
-      .option('--note <text>', noteRequired ? 'Feedback for the submitter (required)' : 'Optional note')
-    sub.action(async (id, opts, cmd) => {
-      const g = getGlobalOpts(cmd)
-      printBanner(g.test, g.json)
-      const { event, partnership } = requireEventAndPartnership(g)
-      const client = createClient({ test: g.test })
-      const body: Record<string, unknown> = {}
-      if (opts.note) body.note = opts.note
-      const response = await withSpinner(`${label}...`, () =>
-        client.post(`/api/v1/e/${event}/p/${partnership}/task_completions/${id}/${apiAction}`, body)
-      )
-      printObject(response.data, { json: g.json })
-    })
+      .description(`Get the ${label} URL for a signature task (expires in 1 hour), or save it with --output`)
+      .option('--output <path>', 'Local path to save the PDF')
+      .action(async (id, opts, cmd) => {
+        const g = getGlobalOpts(cmd)
+        printBanner(g.test, g.json)
+        const { event, partnership } = requireEventAndPartnership(g)
+        const client = createClient({ test: g.test })
+        const url = await getRedirectLocation(
+          client,
+          `/api/v1/e/${event}/p/${partnership}/task_completions/${id}/${apiAction}`
+        )
+        if (!opts.output) {
+          printExpiringUrl(url, SIGNED_PDF_URL_TTL_SECONDS, { json: g.json })
+          return
+        }
+        const outputPath = path.resolve(opts.output)
+        await downloadToFile(url, outputPath)
+        printSuccess(`Wrote ${outputPath}`)
+      })
   }
 
+  registerApprovalActions(cmd, (event, partnership) => `/api/v1/e/${event}/p/${partnership}/task_completions`)
 }
