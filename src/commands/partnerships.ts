@@ -22,6 +22,8 @@ export function registerPartnershipsCommands(program: Command): void {
     .option('--page <n>', 'Page number', '1')
     .option('--per-page <n>', 'Results per page (max 250)', '30')
     .option('--sort <predicate>', 'Sort column (e.g. created_at desc)')
+    .option('--search <text>', 'Search by first name, last name, email, or organization name')
+    .option('--summary', 'Request the lightweight summary payload')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -29,8 +31,11 @@ export function registerPartnershipsCommands(program: Command): void {
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
+      const params: Record<string, unknown> = { q, page: opts.page, per_page: opts.perPage }
+      if (opts.search) params.search = opts.search
+      if (opts.summary) params.summary = true
       const response = await withSpinner('Fetching partnerships...', () =>
-        client.get(`/api/v1/e/${event}/p/${partnership}/partnerships`, { params: { q, page: opts.page, per_page: opts.perPage } })
+        client.get(`/api/v1/e/${event}/p/${partnership}/partnerships`, { params })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })

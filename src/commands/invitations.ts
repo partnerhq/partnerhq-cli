@@ -7,6 +7,9 @@ import { confirmOrExit } from '../prompt'
 
 const LIST_COLS = ['id', 'email', 'state', 'type', 'short_code', 'created_at']
 
+// Invitations::FilteredPartnerships::KEYS
+const GRID_FILTER_HELP = 'status_in[]=accepted|pending|inactive, organization_in[]=<org name>, organization_tags_name_in[]=<tag>, created_from=<date>, created_to=<date>'
+
 export function registerInvitationsCommands(program: Command): void {
   const cmd = program
     .command('invitations')
@@ -15,10 +18,11 @@ export function registerInvitationsCommands(program: Command): void {
   cmd
     .command('list')
     .description('List invitations in an event')
-    .option('--filter <predicate=value>', 'Ransack filter (repeatable)', (v, a: string[]) => [...a, v], [] as string[])
+    .option('--filter <predicate=value>', `Filter (repeatable). Grid filters: ${GRID_FILTER_HELP}; other Ransack predicates also apply`, (v, a: string[]) => [...a, v], [] as string[])
     .option('--page <n>', 'Page number', '1')
     .option('--per-page <n>', 'Results per page (max 250)', '30')
     .option('--sort <predicate>', 'Sort column (e.g. created_at desc)')
+    .option('--search <text>', "Search the invited individuals (same as the invitations grid's search box)")
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -26,8 +30,10 @@ export function registerInvitationsCommands(program: Command): void {
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
       if (opts.sort) q.s = opts.sort
+      const params: Record<string, unknown> = { q, page: opts.page, per_page: opts.perPage }
+      if (opts.search) params.search = opts.search
       const response = await withSpinner('Fetching invitations...', () =>
-        client.get(`/api/v1/e/${event}/p/${partnership}/invitations`, { params: { q, page: opts.page, per_page: opts.perPage } })
+        client.get(`/api/v1/e/${event}/p/${partnership}/invitations`, { params })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -116,30 +122,44 @@ export function registerInvitationsCommands(program: Command): void {
 
   cmd
     .command('bulk-create')
-    .description('Queue invitations for every uninvited individual in the project')
-    .action(async (_opts, cmd) => {
+    .description('Queue invitations for every uninvited individual in the project (narrow it with --filter/--search)')
+    .option('--filter <predicate=value>', `Grid filter (repeatable): ${GRID_FILTER_HELP}`, (v, a: string[]) => [...a, v], [] as string[])
+    .option('--search <text>', 'Only individuals matching this search')
+    .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
-      if (!g.yes) await confirmOrExit('Send invitations to every uninvited individual?')
+      const q = buildFilterParams(opts.filter)
+      const narrowed = Object.keys(q).length > 0 || Boolean(opts.search)
+      if (!g.yes) await confirmOrExit(`Send invitations to every uninvited individual${narrowed ? ' matching the filters' : ''}?`)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
+      const body: Record<string, unknown> = {}
+      if (Object.keys(q).length > 0) body.q = q
+      if (opts.search) body.search = opts.search
       const response = await withSpinner('Queueing bulk invitations...', () =>
-        client.post(`/api/v1/e/${event}/p/${partnership}/invitations/bulk_create`)
+        client.post(`/api/v1/e/${event}/p/${partnership}/invitations/bulk_create`, body)
       )
       printObject(response.data, { json: g.json })
     })
 
   cmd
     .command('bulk-resend')
-    .description('Queue a re-send of every pending invitation in the project')
-    .action(async (_opts, cmd) => {
+    .description('Queue a re-send of every pending invitation in the project (narrow it with --filter/--search)')
+    .option('--filter <predicate=value>', `Grid filter (repeatable): ${GRID_FILTER_HELP}`, (v, a: string[]) => [...a, v], [] as string[])
+    .option('--search <text>', 'Only individuals matching this search')
+    .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
-      if (!g.yes) await confirmOrExit('Re-send every pending invitation?')
+      const q = buildFilterParams(opts.filter)
+      const narrowed = Object.keys(q).length > 0 || Boolean(opts.search)
+      if (!g.yes) await confirmOrExit(`Re-send every pending invitation${narrowed ? ' matching the filters' : ''}?`)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
+      const body: Record<string, unknown> = {}
+      if (Object.keys(q).length > 0) body.q = q
+      if (opts.search) body.search = opts.search
       const response = await withSpinner('Queueing bulk resend...', () =>
-        client.post(`/api/v1/e/${event}/p/${partnership}/invitations/bulk_resend`)
+        client.post(`/api/v1/e/${event}/p/${partnership}/invitations/bulk_resend`, body)
       )
       printObject(response.data, { json: g.json })
     })

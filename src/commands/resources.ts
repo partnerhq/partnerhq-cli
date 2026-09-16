@@ -141,6 +141,24 @@ export function registerResourcesCommands(program: Command): void {
       printObject(response.data, { json: g.json })
     })
 
+  for (const [action, label] of [['publish', 'Publishing'], ['unpublish', 'Unpublishing']]) {
+    cmd
+      .command(`${action} <id>`)
+      .description(action === 'publish'
+        ? 'Publish a resource so partners can see it'
+        : 'Unpublish a resource (back to draft, hidden from partners)')
+      .action(async (id, _opts, cmd) => {
+        const g = getGlobalOpts(cmd)
+        printBanner(g.test, g.json)
+        const { event, partnership } = requireEventAndPartnership(g)
+        const client = createClient({ test: g.test })
+        const response = await withSpinner(`${label} resource...`, () =>
+          client.post(`/api/v1/e/${event}/p/${partnership}/resources/${id}/${action}`)
+        )
+        printObject(response.data, { json: g.json })
+      })
+  }
+
   cmd
     .command('reorder')
     .description('Set display positions in bulk')

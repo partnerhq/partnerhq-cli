@@ -3,6 +3,10 @@ import { createClient, withSpinner } from '../api-client'
 import { printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts } from '../global-opts'
 import { confirmOrExit } from '../prompt'
+import { parseDataFlag, deepMerge } from '../data-flag'
+
+const EVENT_DATA_HELP =
+  'Extra event attributes as JSON or @file, merged over flags (e.g. page_builder_enabled, pdf_download_link_position, email_domain_id, inherit_organization_email_domain)'
 
 export function registerEventsCommands(program: Command): void {
   const events = program
@@ -28,13 +32,15 @@ export function registerEventsCommands(program: Command): void {
     .requiredOption('--name <name>', 'Name of the event')
     .option('--welcome-message <message>', 'Welcome message shown to partners')
     .option('--brand-color <hex>', 'Brand color hex (e.g. #FF0000)')
+    .option('--data <json>', EVENT_DATA_HELP)
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
       const client = createClient({ test: g.test })
-      const body: Record<string, string> = { name: opts.name }
+      let body: Record<string, unknown> = { name: opts.name }
       if (opts.welcomeMessage) body.welcome_message = opts.welcomeMessage
       if (opts.brandColor) body.brand_color_hex = opts.brandColor
+      if (opts.data) body = deepMerge(body, parseDataFlag(opts.data))
 
       const response = await withSpinner('Creating event...', () =>
         client.post('/api/v1/events', { event: body })
@@ -48,14 +54,16 @@ export function registerEventsCommands(program: Command): void {
     .option('--name <name>', 'New name for the event')
     .option('--welcome-message <message>', 'New welcome message')
     .option('--brand-color <hex>', 'New brand color hex')
+    .option('--data <json>', EVENT_DATA_HELP)
     .action(async (permalink, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
       const client = createClient({ test: g.test })
-      const body: Record<string, string> = {}
+      let body: Record<string, unknown> = {}
       if (opts.name) body.name = opts.name
       if (opts.welcomeMessage) body.welcome_message = opts.welcomeMessage
       if (opts.brandColor) body.brand_color_hex = opts.brandColor
+      if (opts.data) body = deepMerge(body, parseDataFlag(opts.data))
 
       const response = await withSpinner('Updating event...', () =>
         client.patch(`/api/v1/events/${permalink}`, { event: body })
