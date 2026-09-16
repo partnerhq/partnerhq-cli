@@ -1,14 +1,17 @@
 import path from 'path'
 import { Command } from 'commander'
 import { createClient, getRedirectLocation, downloadToFile, withSpinner } from '../api-client'
-import { printObject, printSuccess, printBanner } from '../output'
+import { printObject, printSuccess, printBanner, printExpiringUrl } from '../output'
+
+// custom_exports_controller / task_zip_exports_controller DOWNLOAD_URL_TTL
+const DOWNLOAD_URL_TTL_SECONDS = 60
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 
 function addDownload(cmd: Command, segment: string, label: string): void {
   cmd
     .command('download <token>')
-    .description(`Get the ${label} download URL (or save the file with --output)`)
-    .option('--output <path>', 'Local path to save the file')
+    .description(`Get the ${label} download URL — it expires in 60 seconds, so prefer --output to save the file`)
+    .option('--output <path>', 'Local path to save the file (downloads immediately, before the link expires)')
     .action(async (token, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
@@ -19,7 +22,7 @@ function addDownload(cmd: Command, segment: string, label: string): void {
         `/api/v1/e/${event}/p/${partnership}/${segment}/${token}/download`
       )
       if (!opts.output) {
-        console.log(url)
+        printExpiringUrl(url, DOWNLOAD_URL_TTL_SECONDS, { json: g.json })
         return
       }
       const outputPath = path.resolve(opts.output)

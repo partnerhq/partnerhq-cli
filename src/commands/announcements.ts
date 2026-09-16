@@ -5,6 +5,7 @@ import { createClient, buildFilterParams, PaginatedResponse, withSpinner } from 
 import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 import { confirmOrExit } from '../prompt'
+import { parseDataFlag, deepMerge } from '../data-flag'
 
 const LIST_COLS = ['id', 'text', 'segment', 'scheduled_at', 'published_at', 'created_at']
 
@@ -54,18 +55,22 @@ export function registerAnnouncementsCommands(program: Command): void {
     .option('--segment <segment>', 'Recipient segment: all, completed, incomplete, overdue (default: all)')
     .option('--scheduled-at <datetime>', 'Schedule for a future time (ISO 8601). Omit to send now.')
     .option('--notify <type>', 'Notify type: all, task, tag, organization_partnership (default: all)')
+    .option('--email-subject <text>', 'Custom email subject line')
+    .option('--data <json>', 'Extra announcement attributes as JSON or @file, merged over flags (e.g. announceable_ids, segmentable_id)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const body: Record<string, unknown> = {
+      let body: Record<string, unknown> = {
         text: opts.text,
         schedule_now: !opts.scheduledAt,
       }
       if (opts.segment) body.segment = opts.segment
       if (opts.scheduledAt) body.scheduled_at = opts.scheduledAt
       if (opts.notify) body.notify = opts.notify
+      if (opts.emailSubject) body.email_subject = opts.emailSubject
+      if (opts.data) body = deepMerge(body, parseDataFlag(opts.data))
       const response = await withSpinner('Creating announcement...', () =>
         client.post(`/api/v1/e/${event}/p/${partnership}/announcements`, { announcement: body })
       )
@@ -78,15 +83,19 @@ export function registerAnnouncementsCommands(program: Command): void {
     .option('--text <text>', 'New body text')
     .option('--segment <segment>', 'New recipient segment')
     .option('--scheduled-at <datetime>', 'New scheduled time (ISO 8601)')
+    .option('--email-subject <text>', 'New custom email subject line')
+    .option('--data <json>', 'Extra announcement attributes as JSON or @file, merged over flags')
     .action(async (id, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
-      const body: Record<string, unknown> = {}
+      let body: Record<string, unknown> = {}
       if (opts.text) body.text = opts.text
       if (opts.segment) body.segment = opts.segment
       if (opts.scheduledAt) body.scheduled_at = opts.scheduledAt
+      if (opts.emailSubject) body.email_subject = opts.emailSubject
+      if (opts.data) body = deepMerge(body, parseDataFlag(opts.data))
       const response = await withSpinner('Updating announcement...', () =>
         client.patch(`/api/v1/e/${event}/p/${partnership}/announcements/${id}`, { announcement: body })
       )

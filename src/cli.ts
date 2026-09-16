@@ -30,13 +30,15 @@ import { registerPartnerTaskCompletionsCommands } from './commands/partner/task-
 import { registerPartnerChatCommands } from './commands/partner/chat'
 import { registerPartnerInvitationsCommands } from './commands/partner/invitations'
 import { registerPartnerUploadsCommands } from './commands/partner/uploads'
+import { registerPartnerAssetAssignmentsCommands } from './commands/partner/asset-assignments'
+import { registerPartnerEventCommands } from './commands/partner/event'
 
 const program = new Command()
 
 program
   .name('phq')
   .description('PartnerHQ CLI — manage your events, partnerships, tasks, and more')
-  .version('0.2.0')
+  .version('0.3.0')
   .option('--test', 'Use the local dev environment (http://phq.test) instead of production')
   .option('--json', 'Output results as raw JSON')
   .option('--event <permalink>', 'Event permalink (overrides PHQ_EVENT env var)')
@@ -84,6 +86,8 @@ registerPartnerTaskCompletionsCommands(partnerCmd)
 registerPartnerChatCommands(partnerCmd)
 registerPartnerInvitationsCommands(partnerCmd)
 registerPartnerUploadsCommands(partnerCmd)
+registerPartnerAssetAssignmentsCommands(partnerCmd)
+registerPartnerEventCommands(partnerCmd)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err)

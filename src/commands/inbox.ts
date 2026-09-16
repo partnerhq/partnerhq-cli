@@ -1,6 +1,6 @@
 import { Command } from 'commander'
-import { createClient, withSpinner } from '../api-client'
-import { printObject, printSuccess, printBanner } from '../output'
+import { createClient, withSpinner, PaginatedResponse } from '../api-client'
+import { printObject, printSuccess, printBanner, printList } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 
 // Tree shape (Host::InboxTreePresenter): {individuals: [{label, thread, groups: {tasks:[], resources:[], internal_tasks:[]}, organizations: [...], unread, flagged}]}
@@ -32,6 +32,9 @@ function walkNode(node: Record<string, unknown>, depth: number, lines: string[])
   }
 }
 
+// API::V1::Host::InboxActivityPresenter rows (camelCase keys).
+const ACTIVITY_COLS = ['lastMessageAt', 'personName', 'organizationName', 'label', 'taskType', 'unread', 'flagged', 'identifier', 'chatChannelId']
+
 export function registerInboxCommands(program: Command): void {
   const cmd = program
     .command('inbox')
@@ -56,6 +59,25 @@ export function registerInboxCommands(program: Command): void {
         for (const individual of individuals) walkNode(individual, 0, lines)
         console.log(lines.length > 0 ? lines.join('\n') : '(inbox empty)')
       }
+    })
+
+  cmd
+    .command('activity')
+    .description('Flat, newest-first list of every conversation in the project')
+    .option('--unread-only', 'Only unread or flagged conversations')
+    .option('--page <n>', 'Page number', '1')
+    .option('--per-page <n>', 'Results per page (max 250)', '30')
+    .action(async (opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const params: Record<string, unknown> = { page: opts.page, per_page: opts.perPage }
+      if (opts.unreadOnly) params.unread_only = true
+      const response = await withSpinner('Fetching inbox activity...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/host/inbox/activity`, { params })
+      )
+      printList(response.data as PaginatedResponse<Record<string, unknown>>, ACTIVITY_COLS, { json: g.json })
     })
 
   cmd

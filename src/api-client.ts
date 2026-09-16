@@ -35,6 +35,7 @@ export function createClient(opts: ApiOptions): AxiosInstance {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    paramsSerializer: { serialize: serializeRailsParams },
   })
 
   client.interceptors.response.use(
@@ -92,6 +93,7 @@ export function createUnauthenticatedClient(opts: ApiOptions): AxiosInstance {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    paramsSerializer: { serialize: serializeRailsParams },
   })
 }
 
@@ -115,19 +117,58 @@ export async function withSpinner<T>(
   }
 }
 
-export function buildFilterParams(filters: string[]): Record<string, string> {
-  const q: Record<string, string> = {}
+export type FilterParams = Record<string, string | string[]>
+
+/**
+ * Parse repeatable `--filter predicate=value` flags into a Ransack `q` hash.
+ * A key ending in `[]` (e.g. `status_in[]=open`) always yields an array, and a
+ * key given more than once collects every value instead of keeping the last.
+ */
+export function buildFilterParams(filters: string[]): FilterParams {
+  const q: FilterParams = {}
+  const seen = new Set<string>()
   for (const f of filters) {
     const idx = f.indexOf('=')
     if (idx === -1) {
       console.error(chalk.red('✗') + ` Invalid filter "${f}". Filters must be in the format "predicate=value".`)
       process.exit(1)
     }
-    const key = f.slice(0, idx).trim()
+    const rawKey = f.slice(0, idx).trim()
     const value = f.slice(idx + 1).trim()
-    q[key] = value
+    const isArrayKey = rawKey.endsWith('[]')
+    const key = isArrayKey ? rawKey.slice(0, -2) : rawKey
+    const existing = q[key]
+    if (isArrayKey || seen.has(key)) {
+      const values = existing === undefined ? [] : Array.isArray(existing) ? existing : [existing]
+      q[key] = [...values, value]
+    } else {
+      q[key] = value
+    }
+    seen.add(key)
   }
   return q
+}
+
+/**
+ * Serialize query params the way Rails/Rack parses them: nested objects as
+ * `q[key]=v` and arrays as `q[key][]=v1&q[key][]=v2`. Axios' default encoder
+ * emits `q[key][0]=v1`, which Rack reads as a hash rather than an array.
+ */
+export function serializeRailsParams(params: Record<string, unknown>): string {
+  const parts: string[] = []
+  const visit = (prefix: string, value: unknown): void => {
+    if (value === undefined || value === null) return
+    if (Array.isArray(value)) {
+      for (const v of value) visit(`${prefix}[]`, v)
+    } else if (typeof value === 'object' && !(value instanceof Date)) {
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) visit(`${prefix}[${k}]`, v)
+    } else {
+      const str = value instanceof Date ? value.toISOString() : String(value)
+      parts.push(`${encodeURIComponent(prefix).replace(/%5B/g, '[').replace(/%5D/g, ']')}=${encodeURIComponent(str)}`)
+    }
+  }
+  for (const [k, v] of Object.entries(params)) visit(k, v)
+  return parts.join('&')
 }
 
 /**
@@ -156,6 +197,7 @@ export function createMultipartClient(opts: ApiOptions): AxiosInstance {
     },
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
+    paramsSerializer: { serialize: serializeRailsParams },
   })
 
   client.interceptors.response.use(

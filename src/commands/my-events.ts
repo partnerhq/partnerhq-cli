@@ -3,7 +3,7 @@ import { createClient, withSpinner, PaginatedResponse } from '../api-client'
 import { printList, printBanner } from '../output'
 import { getGlobalOpts } from '../global-opts'
 
-const LIST_COLS = ['event_id', 'event_name', 'event_permalink', 'partnership_id', 'host', 'archived', 'created_at']
+const LIST_COLS = ['event_id', 'event_name', 'event_permalink', 'partnership_id', 'organization_name', 'host', 'tasks', 'tasks_overdue', 'resources_count', 'archived']
 
 export function registerMyEventsCommands(program: Command): void {
   const cmd = program
@@ -22,6 +22,14 @@ export function registerMyEventsCommands(program: Command): void {
       const response = await withSpinner('Fetching events...', () =>
         client.get('/api/v1/events/my_events', { params: { page: opts.page, per_page: opts.perPage } })
       )
-      printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
+      const data = response.data as PaginatedResponse<Record<string, unknown>>
+      const rows = g.json ? data : {
+        ...data,
+        collection: data.collection.map((row) => ({
+          ...row,
+          tasks: row.tasks_assigned === undefined ? undefined : `${row.tasks_completed ?? 0}/${row.tasks_assigned}`,
+        })),
+      }
+      printList(rows, LIST_COLS, { json: g.json })
     })
 }

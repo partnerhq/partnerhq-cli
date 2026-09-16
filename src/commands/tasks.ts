@@ -7,6 +7,9 @@ import { parseDataFlag, deepMerge } from '../data-flag'
 
 const LIST_COLS = ['id', 'label', 'type', 'pinned', 'locked', 'advance', 'due_at', 'published_at', 'created_at']
 
+// Tasks::ComputedSort::SORT_KEYS — sent as ?sort=&direction= instead of Ransack's q[s].
+const COMPUTED_SORTS = ['completed_count', 'assigned_count', 'views_count', 'field_count', 'has_signature', 'response_rate', 'overdue_count']
+
 export function registerTasksCommands(program: Command): void {
   const cmd = program
     .command('tasks')
@@ -18,16 +21,23 @@ export function registerTasksCommands(program: Command): void {
     .option('--filter <predicate=value>', 'Ransack filter (repeatable)', (v, a: string[]) => [...a, v], [] as string[])
     .option('--page <n>', 'Page number', '1')
     .option('--per-page <n>', 'Results per page (max 250)', '30')
-    .option('--sort <predicate>', 'Sort column (e.g. position asc)')
+    .option('--sort <predicate>', `Ransack sort (e.g. "position asc"), or a computed sort: ${COMPUTED_SORTS.join(', ')}`)
+    .option('--direction <dir>', 'Direction for a computed --sort: asc or desc (default: desc)')
     .action(async (opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
       const { event, partnership } = requireEventAndPartnership(g)
       const client = createClient({ test: g.test })
       const q = buildFilterParams(opts.filter)
-      if (opts.sort) q.s = opts.sort
+      const params: Record<string, unknown> = { q, page: opts.page, per_page: opts.perPage }
+      if (opts.sort && COMPUTED_SORTS.includes(opts.sort)) {
+        params.sort = opts.sort
+        if (opts.direction) params.direction = opts.direction
+      } else if (opts.sort) {
+        q.s = opts.sort
+      }
       const response = await withSpinner('Fetching tasks...', () =>
-        client.get(`/api/v1/e/${event}/p/${partnership}/tasks`, { params: { q, page: opts.page, per_page: opts.perPage } })
+        client.get(`/api/v1/e/${event}/p/${partnership}/tasks`, { params })
       )
       printList(response.data as PaginatedResponse<Record<string, unknown>>, LIST_COLS, { json: g.json })
     })
@@ -152,5 +162,23 @@ export function registerTasksCommands(program: Command): void {
       )
       printObject(response.data, { json: g.json })
     })
+
+  for (const [action, label] of [['publish', 'Publishing'], ['unpublish', 'Unpublishing']]) {
+    cmd
+      .command(`${action} <id>`)
+      .description(action === 'publish'
+        ? 'Publish a task so partners can see it'
+        : 'Unpublish a task (back to draft, hidden from partners)')
+      .action(async (id, _opts, cmd) => {
+        const g = getGlobalOpts(cmd)
+        printBanner(g.test, g.json)
+        const { event, partnership } = requireEventAndPartnership(g)
+        const client = createClient({ test: g.test })
+        const response = await withSpinner(`${label} task...`, () =>
+          client.post(`/api/v1/e/${event}/p/${partnership}/tasks/${id}/${action}`)
+        )
+        printObject(response.data, { json: g.json })
+      })
+  }
 
 }
