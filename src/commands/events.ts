@@ -6,7 +6,7 @@ import { confirmOrExit } from '../prompt'
 import { parseDataFlag, deepMerge } from '../data-flag'
 
 const EVENT_DATA_HELP =
-  'Extra event attributes as JSON or @file, merged over flags (e.g. page_builder_enabled, pdf_download_link_position, email_domain_id, inherit_organization_email_domain)'
+  'Extra event attributes as JSON or @file, merged over flags (e.g. page_builder_enabled, pdf_download_link_position above|below, email_domain_id, inherit_organization_email_domain)'
 
 export function registerEventsCommands(program: Command): void {
   const events = program

@@ -46,6 +46,10 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [partner chat](#partner-chat)
   - [partner invitations](#partner-invitations)
   - [partner uploads](#partner-uploads)
+  - [partner asset-assignments](#partner-asset-assignments)
+  - [partner event](#partner-event)
+- [Task completion status](#task-completion-status)
+- [Short-lived download links](#short-lived-download-links)
 - [Power user: --data for nested attributes](#power-user---data-for-nested-attributes)
 - [Filtering with Ransack](#filtering-with-ransack)
 - [Pagination](#pagination)
@@ -373,21 +377,31 @@ If the API is unreachable or the token is rejected, `identity` is `null` and `id
 
 ### dashboard
 
-Show **your dashboard** for the current event — every task completion assigned to you across all task types (ToDos, Resources, and, for hosts, Internal Tasks). Internally calls `partner task-completions list?type=all`, so the response always includes a `task_type` column to distinguish each row's type. Requires `--event` and `--partnership` (or saved config defaults).
+Show **your dashboard** for the current event — every task completion assigned to you across all task types (ToDos, Resources, and, for hosts, Internal Tasks). Internally calls `partner task-completions list` with `type=all` (override with `--type`), so the response always includes a `task_type` column to distinguish each row's type. Requires `--event` and `--partnership` (or saved config defaults).
 
 ```bash
-phq dashboard [--filter <predicate=value>] [--page N] [--per-page N] [--sort <predicate>] [--json]
+phq dashboard [--status active|assigned_to_me|needs_approval|awaiting_others|archived] \
+  [--type tasks|resources|internal_tasks|all] [--organization <org_partnership_id>] \
+  [--asset-assignment <id>] [--page N] [--per-page N] [--json]
 ```
 
 ```bash
-# Just my open assignments in the current event
-phq dashboard --filter "completed_at_null=true"
+# Everything assigned to me personally
+phq dashboard --status assigned_to_me
 
-# Sorted by due date
-phq dashboard --sort "due_at asc"
+# Submissions waiting on my approval decision
+phq dashboard --status needs_approval
+
+# Only one organization's tasks
+phq dashboard --type tasks --organization 456
+
+# Only completions for one asset (ids from `phq partner asset-assignments list`)
+phq dashboard --asset-assignment 12
 ```
 
-Columns: `id`, `task_type`, `label`, `task_id`, `enabled`, `completed_at`, `due_at`, `overdue`, `created_at`.
+Columns: `id`, `task_type`, `label`, `task_id`, `status`, `completed_at`, `due_at`, `overdue`, `created_at`. The `status` column is derived from approval state first — see [Task completion status](#task-completion-status). A `Counts:` line under the table shows the size of each tab (`active`, `assigned_to_me`, `needs_approval`, `awaiting_others`, `archived`).
+
+> The partner endpoint does not apply Ransack, so `--filter` and `--sort` are accepted but ignored; rows use a fixed order (incomplete first, then by due date). Use `--status`/`--type` to narrow results.
 
 ---
 
@@ -398,6 +412,8 @@ List all events the authenticated user belongs to (no event/partnership context 
 ```bash
 phq my-events list [--page N] [--per-page N] [--json]
 ```
+
+Columns: `event_id`, `event_name`, `event_permalink`, `partnership_id`, `organization_name`, `host`, `tasks` (completed/assigned), `tasks_overdue`, `resources_count`, `archived`. `--json` also includes `created_at`, `brand_color_hex`, `logo_thumb_url`, and `unread_count`.
 
 ---
 
@@ -420,10 +436,14 @@ Manage events (projects). These commands do **not** require `--event`/`--partner
 phq events get <permalink> [--json]
 
 # Create a new event
-phq events create --name "Acme Summit 2025" [--welcome-message "Welcome!"] [--brand-color "#FF5733"]
+phq events create --name "Acme Summit 2025" [--welcome-message "Welcome!"] [--brand-color "#FF5733"] [--data <json|@file>]
 
 # Update an event
-phq events update <permalink> [--name "New Name"] [--welcome-message "..."] [--brand-color "#000000"]
+phq events update <permalink> [--name "New Name"] [--welcome-message "..."] [--brand-color "#000000"] [--data <json|@file>]
+
+# Settings without a dedicated flag go through --data (merged over the flags)
+phq events update acme-2025 --data '{"page_builder_enabled":true,"pdf_download_link_position":"below"}'
+phq events update acme-2025 --data '{"email_domain_id":3,"inherit_organization_email_domain":false}'
 
 # Delete an event (will ask for confirmation)
 phq events delete <permalink>
@@ -440,7 +460,7 @@ phq events delete <permalink> --yes
 Manage people (partners and hosts) within an event.
 
 ```bash
-phq partnerships list   --event <permalink> --partnership <id> [--filter "..."] [--page N] [--per-page N] [--sort "field asc"]
+phq partnerships list   --event <permalink> --partnership <id> [--filter "..."] [--search <text>] [--summary] [--page N] [--per-page N] [--sort "field asc"]
 phq partnerships get    <id>   --event <permalink> --partnership <id>
 phq partnerships create --event <permalink> --partnership <id> --first-name <name> --last-name <name> --email <email> [--host] [--read-only] [--notes "..."]
 phq partnerships update <id>   --event <permalink> --partnership <id> [--first-name <name>] [--email <email>] [--host true|false] [--read-only true|false]
@@ -464,6 +484,12 @@ phq partnerships retrieve --event <permalink> --partnership <id> --first-name <n
 phq partnerships list --event acme-2025 --partnership 1 --filter "host_eq=true"
 phq partnerships list --event acme-2025 --partnership 1 --filter "email_cont=@acme.com"
 phq partnerships list --event acme-2025 --partnership 1 --filter "first_name_cont=jane" --filter "read_only_eq=false"
+
+# Free-text search across first/last name, email and organization name
+phq partnerships list --event acme-2025 --partnership 1 --search "acme"
+
+# Lightweight rows (id, first_name, last_name, email, host, bot, read_only, name, avatar_path)
+phq partnerships list --event acme-2025 --partnership 1 --summary --per-page 250 --json
 ```
 
 ---
@@ -510,12 +536,20 @@ phq org-partnerships list --event acme-2025 --partnership 1 --filter "host_eq=tr
 Manage to-do tasks within an event.
 
 ```bash
-phq tasks list    --event <permalink> --partnership <id> [--filter "..."] [--page N] [--per-page N] [--sort "position asc"]
+phq tasks list    --event <permalink> --partnership <id> [--filter "..."] [--page N] [--per-page N] [--sort "position asc"|<computed>] [--direction asc|desc]
 phq tasks get     <id>   --event <permalink> --partnership <id>
 phq tasks create  --event <permalink> --partnership <id> --label <label> [--description "..."] [--due-at "2025-06-01T00:00:00Z"] [--pinned] [--locked] [--advance] [--notify-hosts] [--go-to-link <url>] [--data <json|@file>]
 phq tasks update  <id>   --event <permalink> --partnership <id> [--label <label>] [--pinned true|false] [--locked true|false] [--data <json|@file>]
 phq tasks delete  <id>   --event <permalink> --partnership <id>
 phq tasks toggle-archive <id> --event <permalink> --partnership <id>
+phq tasks publish   <id> --event <permalink> --partnership <id>   # visible to partners
+phq tasks unpublish <id> --event <permalink> --partnership <id>   # back to draft
+```
+
+`--sort` takes a Ransack sort (`"label asc"`) or one of the computed sorts the web tasks table uses: `completed_count`, `assigned_count`, `views_count`, `field_count`, `has_signature`, `response_rate`, `overdue_count`. Computed sorts honor `--direction` (default `desc`).
+
+```bash
+phq tasks list --event acme-2025 --partnership 1 --sort response_rate --direction asc
 ```
 
 **Example filters:**
@@ -559,6 +593,8 @@ phq resources create  --event <permalink> --partnership <id> --label <label> [--
 phq resources update  <id>   --event <permalink> --partnership <id> [--label <label>] [--go-to-link <url>] [--data <json|@file>]
 phq resources delete  <id>   --event <permalink> --partnership <id>
 phq resources toggle-archive <id> --event <permalink> --partnership <id>
+phq resources publish   <id> --event <permalink> --partnership <id>
+phq resources unpublish <id> --event <permalink> --partnership <id>
 
 # Set display positions in bulk (map of resource ID to position)
 phq resources reorder --positions '{"500":1,"501":2}' --event <permalink> --partnership <id>
@@ -591,8 +627,8 @@ Manage announcements within an event. Sent announcements are immutable.
 ```bash
 phq announcements list    --event <permalink> --partnership <id> [--filter "..."]
 phq announcements get     <id>   --event <permalink> --partnership <id>
-phq announcements create  --event <permalink> --partnership <id> --text "Message body" [--segment all|completed|incomplete|overdue] [--scheduled-at "2025-06-01T09:00:00Z"] [--notify all|task|tag|organization_partnership]
-phq announcements update  <id>   --event <permalink> --partnership <id> [--text "..."] [--segment "..."] [--scheduled-at "..."]
+phq announcements create  --event <permalink> --partnership <id> --text "Message body" [--segment all|completed|incomplete|overdue] [--scheduled-at "2025-06-01T09:00:00Z"] [--notify all|task|tag|organization_partnership] [--email-subject "..."] [--data <json|@file>]
+phq announcements update  <id>   --event <permalink> --partnership <id> [--text "..."] [--segment "..."] [--scheduled-at "..."] [--email-subject "..."] [--data <json|@file>]
 phq announcements delete  <id>   --event <permalink> --partnership <id>
 
 # Authoring helpers (nothing saved or sent to partners)
@@ -644,7 +680,8 @@ phq tags list --event acme-2025 --partnership 1 --filter "name_cont=sponsor"
 Manage task assignment records (which orgs/partners are assigned to which tasks). Task completions cannot be created or deleted directly — they are created automatically when tasks are assigned.
 
 ```bash
-phq task-completions list     --event <permalink> --partnership <id> [--filter "..."] [--sort "due_at asc"]
+phq task-completions list     --event <permalink> --partnership <id> [--filter "..."] [--sort "due_at asc"] \
+  [--status needs_approval|awaiting_others] [--task-id <id> [--sort activity|status] [--direction asc|desc]]
 phq task-completions get      <id>   --event <permalink> --partnership <id>
 phq task-completions update   <id>   --event <permalink> --partnership <id> [--enabled true|false] [--due-at "..."] [--assigned-partnership-id <id>]
 phq task-completions complete <id>   --event <permalink> --partnership <id>
@@ -654,10 +691,30 @@ phq task-completions reset    <id>   --event <permalink> --partnership <id>
 phq task-completions submit-for-approval <id> --event <permalink> --partnership <id>
 phq task-completions approve-submission  <id> [--note "..."] --event <permalink> --partnership <id>
 phq task-completions request-changes     <id> --note "..."   --event <permalink> --partnership <id>
+phq task-completions not-approve         <id> --note "..."   --event <permalink> --partnership <id>
 
-# Signature tasks: get the signed PDF (URL, or save with --output)
-phq task-completions download-signed-pdf <id> [--output signed.pdf] --event <permalink> --partnership <id>
+# Signature tasks: get the signed PDF or certificate of completion (URL, or save with --output)
+phq task-completions download-signed-pdf  <id> [--output signed.pdf]      --event <permalink> --partnership <id>
+phq task-completions download-certificate <id> [--output certificate.pdf] --event <permalink> --partnership <id>
 ```
+
+`request-changes` and `not-approve` require `--note` (the CLI refuses to send the request without one). `not-approve` denies the submission; a denial normally also sets `completed_at`, which is why the list shows a derived `status` column — see [Task completion status](#task-completion-status).
+
+Columns: `id`, `task_id`, `label`, `partnerable_id`, `status`, `enabled`, `completed_at`, `due_at`, `created_at`. `--status needs_approval` / `awaiting_others` returns the approval queues, and a `Counts:` line is printed when the server returns counts. The signed PDF and certificate URLs expire in 1 hour.
+
+`--task-id` lists one task's assignments using the same query as the web task page. It supports an organization-name search and a submission-state filter, plus `--sort activity|status` with `--direction`:
+
+```bash
+# Submissions in review or sent back for changes on task 123
+phq task-completions list --event acme-2025 --partnership 1 --task-id 123 \
+  --filter "status_in[]=in_review" --filter "status_in[]=changes_requested"
+
+# Denied submissions for organizations matching "vendor"
+phq task-completions list --event acme-2025 --partnership 1 --task-id 123 \
+  --filter "label_cont=vendor" --filter "status_in[]=not_approved"
+```
+
+`status_in[]` values: `open`, `completed`, `overdue`, `in_review`, `changes_requested`, `not_approved` (OR-combined).
 
 **Example filters:**
 
@@ -732,7 +789,7 @@ phq messages list --event acme-2025 --partnership 1 --filter "text_cont=hello"
 Manage invitations within an event.
 
 ```bash
-phq invitations list   --event <permalink> --partnership <id> [--filter "..."]
+phq invitations list   --event <permalink> --partnership <id> [--filter "..."] [--search <text>]
 phq invitations get    <id> --event <permalink> --partnership <id>
 phq invitations create --event <permalink> --partnership <id> \
   --email <email> [--first-name <name>] [--last-name <name>] \
@@ -746,7 +803,13 @@ phq invitations create --memberable-id <partnership_id> --event <permalink> --pa
 # Bulk actions (queued in the background, like the web UI buttons)
 phq invitations bulk-create --event <permalink> --partnership <id>   # invite everyone uninvited
 phq invitations bulk-resend --event <permalink> --partnership <id>   # re-send all pending
+
+# Narrow a bulk action with the invitations grid's filters and search
+phq invitations bulk-resend --event <permalink> --partnership <id> \
+  --filter "status_in[]=pending" --filter "organization_tags_name_in[]=Sponsor" [--search "acme"]
 ```
+
+Grid filters (for `list`, `bulk-create` and `bulk-resend`): `status_in[]=accepted|pending|inactive`, `organization_in[]=<organization name>`, `organization_tags_name_in[]=<tag name>`, `created_from=<date>`, `created_to=<date>`, plus `--search`. On `list`, other Ransack predicates still apply on top.
 
 `create` creates the partnership and emails the invitation, exactly like "Invite"
 in the web UI. Partner invitations require at least one `--organization` (the org
@@ -784,6 +847,7 @@ Host inbox: the unread/flagged conversation tree across the whole project
 
 ```bash
 phq inbox tree      --event <permalink> --partnership <id> [--json]
+phq inbox activity  --event <permalink> --partnership <id> [--unread-only] [--page N] [--per-page N]
 phq inbox flag      <chat_channel_id> --event <permalink> --partnership <id>
 phq inbox unflag    <chat_channel_id> --event <permalink> --partnership <id>
 phq inbox mark-read <identifier>      --event <permalink> --partnership <id>
@@ -793,6 +857,11 @@ phq inbox mark-read <identifier>      --event <permalink> --partnership <id>
 `flag`/`unflag`) and `[identifier]` UUID (for `mark-read`, and for reading the
 thread with `phq partner chat show/messages`). Unread counts and flags roll up
 to parent nodes.
+
+`activity` is the same conversations as one flat, newest-first, paginated list
+(one row per conversation): `lastMessageAt`, `personName`, `organizationName`,
+`label`, `taskType`, `unread`, `flagged`, `identifier`, `chatChannelId`.
+`--unread-only` keeps only unread or flagged conversations.
 
 ---
 
@@ -859,6 +928,8 @@ phq custom-exports get      <token> --event <permalink> --partnership <id>   # p
 phq custom-exports download <token> [--output export.csv] --event <permalink> --partnership <id>
 ```
 
+The download URL expires in **60 seconds** — see [Short-lived download links](#short-lived-download-links).
+
 ---
 
 ### task-zip-exports
@@ -872,6 +943,8 @@ phq task-zip-exports create --exportable-type Task --exportable-id 400 \
 phq task-zip-exports get      <token> --event <permalink> --partnership <id>   # processing | ready
 phq task-zip-exports download <token> [--output files.zip] --event <permalink> --partnership <id>
 ```
+
+The download URL expires in **60 seconds** — see [Short-lived download links](#short-lived-download-links).
 
 ---
 
@@ -893,7 +966,7 @@ phq partner profile update --event <permalink> --partnership <id> \
 
 ### partner org-partnerships
 
-View organizations you belong to (as a partner, read-only).
+View organizations you belong to (as a partner, read-only). Archived organizations are excluded, and results are sorted by name unless you pass `--sort`.
 
 ```bash
 phq partner org-partnerships list --event <permalink> --partnership <id> [--filter "..."]
@@ -907,7 +980,9 @@ phq partner org-partnerships get  <id>   --event <permalink> --partnership <id>
 View and interact with your own task assignments as a partner.
 
 ```bash
-phq partner task-completions list     --event <permalink> --partnership <id> [--filter "..."]
+phq partner task-completions list     --event <permalink> --partnership <id> \
+  [--status active|assigned_to_me|needs_approval|awaiting_others|archived] \
+  [--type tasks|resources|internal_tasks|all] [--organization <org_partnership_id>] [--asset-assignment <id>]
 phq partner task-completions get      <id>   --event <permalink> --partnership <id>
 phq partner task-completions update   <id>   --event <permalink> --partnership <id> [--due-at "..."]
 phq partner task-completions complete <id>   --event <permalink> --partnership <id>
@@ -917,9 +992,12 @@ phq partner task-completions reset    <id>   --event <permalink> --partnership <
 phq partner task-completions submit-for-approval <id> --event <permalink> --partnership <id>
 phq partner task-completions approve-submission  <id> [--note "..."] --event <permalink> --partnership <id>
 phq partner task-completions request-changes     <id> --note "..."   --event <permalink> --partnership <id>
+phq partner task-completions not-approve         <id> --note "..."   --event <permalink> --partnership <id>
 ```
 
-`get` returns the assignment's metadata along with the underlying task, including the task's `description`. The description is rich-text HTML; in default (table) mode the CLI strips the HTML and prints the description as readable plain text below the main table. With `--json` the raw HTML is preserved so consumers can render it themselves.
+`list` shows `id`, `label`, `task_id`, `status`, `completed_at`, `due_at`, `overdue`, `created_at`, then a `Counts:` line with the size of each `--status` tab. `--type` defaults to `tasks` (ToDos); `internal_tasks` only returns rows for hosts. As with [dashboard](#dashboard), `--filter`/`--sort` are ignored by this endpoint.
+
+`get` returns the assignment's metadata along with the underlying task, a derived `status`, `approval` (`required`, `pending`, `latest_submission_state`, `latest_submission_at`) and `approval_badge`. The task carries both `rendered_description` (sanitized, with any tag-targeted copy for your organization — what the web shows) and the raw `description`. In default (table) mode the CLI prints the rendered description (falling back to `description`) as plain text below the main table, with the HTML stripped. With `--json` both raw HTML fields are preserved so consumers can render them themselves.
 
 `update` accepts `--due-at` for the due date and `--data <json>` (or `@file.json`) for everything else, including custom field values:
 
@@ -937,13 +1015,15 @@ Where `id` is the `custom_field_values[].id` returned by `get`. CheckboxGroup fi
 Read and write chat channels you have access to as a partner. Use `list` to discover channel identifiers, then `show`/`messages`/`send` against a specific identifier.
 
 ```bash
-phq partner chat list                    --event <permalink> --partnership <id> [--type partnership|task_completion] [--page N] [--per-page N]
+phq partner chat list                    --event <permalink> --partnership <id> [--type partnership|task_completion|asset_assignment] [--page N] [--per-page N]
 phq partner chat show     <identifier>   --event <permalink> --partnership <id>
 phq partner chat messages <identifier>   --event <permalink> --partnership <id> [--page N] [--per-page N]
 phq partner chat send     <identifier>   --event <permalink> --partnership <id> --text "Hello team!"
 ```
 
-`list` returns every chat channel the caller has access to in the project: their own partnership channel (the "Project chat" / dashboard chat) plus the chat channels for any task completions belonging to their organizations. Hosts see every channel in the project. Each row carries an `identifier` (use it with the other subcommands), the `channelable_type` (`Partnership` or `TaskCompletion`), the `channelable_id`, a human-readable `label`, and — for `TaskCompletion` rows — `task_completion_id` and `task_type` so callers can filter or scope.
+`list` returns every chat channel the caller has access to in the project: their own partnership channel (the "Project chat" / dashboard chat) plus the chat channels for any task completions belonging to their organizations. Hosts see every channel in the project. Each row carries an `identifier` (use it with the other subcommands), the `channelable_type` (`Partnership` or `TaskCompletion`), the `channelable_id`, a human-readable `label`, and — for `TaskCompletion` rows — `task_completion_id` and `task_type` so callers can filter or scope. Each row also has `unread_count` (unread messages for you) and `flagged` (you marked the thread unread); `--json` adds `last_message`.
+
+`show` and `messages` include deleted messages as tombstones (their `discarded_at` is set and `text` is a "message deleted" notice). The table's `notes` column marks `[deleted]` and `[edited]` messages, replies (`reply to #<id> (<name>)`), and reactions (`👍 2`). `--json` returns the raw `discarded_at`, `edited_at`, `reactions` and `reply_to` fields.
 
 ---
 
@@ -985,6 +1065,68 @@ phq partner uploads file get    <id> --event <permalink> --partnership <id> [--o
 
 ---
 
+### partner asset-assignments
+
+List the assets assigned to your organizations — only those with at least one enabled task completion, mirroring the web dashboard's asset picker. Use the `id` with `--asset-assignment` on `dashboard` or `partner task-completions list`.
+
+```bash
+phq partner asset-assignments list --event <permalink> --partnership <id> [--page N] [--per-page N]
+```
+
+Columns: `id`, `asset`, `organization`, `chat_channel` (identifier, may be empty briefly after an asset is created), `public_permalink`.
+
+---
+
+### partner event
+
+Project details as a partner sees them (the host `events get` is host-only).
+
+```bash
+phq partner event get --event <permalink> --partnership <id> [--json]
+```
+
+Returns `id`, `name`, `permalink`, `description`, `brand_color_hex`, `logo_thumb_url`, `time_zone`, `archived`, `deactivated`, and feature flags (`allow_teammate_invitations`, `enable_assets`, `enable_choice_limits`, `fundraising_enabled`, `page_builder_enabled`, `pdf_download_link_position`). The welcome message is printed as plain text below the table.
+
+---
+
+## Task completion status
+
+Task completion lists (`dashboard`, `task-completions list`, `partner task-completions list`) and `get` show a derived `status` column. Approval state is checked **before** `completed_at`, because a submission that was not approved also sets `completed_at` and would otherwise look complete:
+
+| `status`            | Meaning                                                                |
+|---------------------|------------------------------------------------------------------------|
+| `Not approved`      | The submission was denied (`approval_badge: not_approved`)             |
+| `Needs review`      | A submission is waiting for **your** decision                          |
+| `Awaiting approval` | A submission is waiting for someone else's decision                    |
+| `Changes requested` | The submission was sent back to you for changes                        |
+| `Approved`          | The submission was approved and the task is complete                   |
+| `Complete`          | Completed (no approval involved)                                       |
+| `Overdue`           | Not completed and past its due date                                    |
+| `Open`              | Not completed                                                          |
+| `Resource`          | A resource row (resources are reference-only and cannot be completed)  |
+
+The raw `approval_badge` and `approval` fields are available with `--json`. If a server does not send `approval_badge`, the CLI falls back to `approval.latest_submission_state` (`In review` for a pending submission) and then to `completed_at`.
+
+---
+
+## Short-lived download links
+
+Download commands follow the API's redirect to a signed file URL:
+
+| Command                                         | URL lifetime |
+|-------------------------------------------------|--------------|
+| `custom-exports download`, `task-zip-exports download` | 60 seconds |
+| `task-completions download-signed-pdf`, `download-certificate` | 1 hour |
+| `partner uploads ... get`                       | 1 week       |
+
+Without `--output`, export and signature commands print the URL on stdout and a warning with its lifetime on stderr (so `$(phq ...)` still captures just the URL; with `--json` the output is `{"url": ..., "expires_in_seconds": ...}`). An export link is dead a minute later, so prefer `--output <path>`, which downloads the file right away:
+
+```bash
+phq custom-exports download 3f9c2a --output export.csv --event acme-2025 --partnership 1
+```
+
+---
+
 ## Power user: --data for nested attributes
 
 `tasks`, `resources`, and `internal-tasks` accept a `--data` flag on `create` and `update` for any field not exposed as a top-level CLI flag (custom fields, inventories, organization assignments, descriptions-by-tags, asset/tag IDs, etc.). The value is JSON — either a literal string or `@path/to/file.json`.
@@ -1017,6 +1159,13 @@ phq resources create --event acme-2025 --partnership 1 --label "Press Kit" --dat
 phq internal-tasks update 55 --event acme-2025 --partnership 1 --data '{"internal_task":{"description":"Updated via CLI"}}'
 ```
 
+`events create/update`, `announcements create/update`, `invitations create` and `partner task-completions update` also take `--data`, but there it holds the resource's **attributes** (not wrapped in `{"event": ...}`), and the `--data` values win over named flags:
+
+```bash
+phq events update acme-2025 --data '{"page_builder_enabled":true}'
+phq announcements create --text "Doors open at 9" --data '{"announceable_ids":[400,401]}' --event acme-2025 --partnership 1
+```
+
 See the live API docs at <https://app.partnerhq.com/developers> for the full list of accepted nested attributes and types.
 
 ---
@@ -1031,7 +1180,7 @@ phq tasks list --event acme-2025 --partnership 1 \
   --filter "pinned_eq=true"
 ```
 
-Filters use the format `predicate=value`, where the predicate is a Ransack search predicate.
+Filters use the format `predicate=value`, where the predicate is a Ransack search predicate. For list predicates, a key ending in `[]` (e.g. `status_in[]=draft`) or a key repeated across several `--filter` flags is sent as an array (`q[status_in][]=published&q[status_in][]=draft`).
 
 ### Standard Ransack Predicates
 
@@ -1052,8 +1201,8 @@ These work on any column of the resource (use the exact database column name as 
 | `_lteq`           | Less than or equal                                                 | `created_at_lteq=2025-06-01`         |
 | `_null`           | Is NULL (value is ignored)                                         | `completed_at_null=1`                |
 | `_not_null`       | Is NOT NULL (value is ignored)                                     | `completed_at_not_null=1`            |
-| `_in`             | In a comma-separated list                                          | `id_in=1,2,3`                        |
-| `_not_in`         | Not in a comma-separated list                                      | `id_not_in=4,5`                      |
+| `_in`             | In a list (repeat the filter, or use `[]`)                         | `id_in[]=1` `id_in[]=2`              |
+| `_not_in`         | Not in a list (repeat the filter, or use `[]`)                     | `id_not_in[]=4` `id_not_in[]=5`      |
 | `_true`           | Is true (boolean shorthand)                                        | `pinned_true=1`                      |
 | `_false`          | Is false (boolean shorthand)                                       | `locked_false=1`                     |
 
