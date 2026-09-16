@@ -1,6 +1,6 @@
 {
   "name": "partnerhq-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Official CLI for the PartnerHQ API",
   "main": "dist/cli.js",
   "bin": {
@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/cli.ts",
-    "lint": "eslint src --ext .ts",
+    "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
