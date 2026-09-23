@@ -1,6 +1,6 @@
 {
   "name": "partnerhq-cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Official CLI for the PartnerHQ API",
   "main": "dist/cli.js",
   "bin": {

@@ -30,6 +30,8 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [internal-tasks](#internal-tasks)
   - [announcements](#announcements)
   - [tags](#tags)
+  - [assets](#assets)
+  - [pages](#pages)
   - [task-completions](#task-completions)
   - [authorizations](#authorizations)
   - [messages](#messages)
@@ -441,6 +443,10 @@ phq events create --name "Acme Summit 2025" [--welcome-message "Welcome!"] [--br
 # Update an event
 phq events update <permalink> [--name "New Name"] [--welcome-message "..."] [--brand-color "#000000"] [--data <json|@file>]
 
+# Upload or remove the project logo (image file, sent as a multipart upload)
+phq events update acme-2025 --logo ./logo.png
+phq events update acme-2025 --remove-logo
+
 # Settings without a dedicated flag go through --data (merged over the flags)
 phq events update acme-2025 --data '{"page_builder_enabled":true,"pdf_download_link_position":"below"}'
 phq events update acme-2025 --data '{"email_domain_id":3,"inherit_organization_email_domain":false}'
@@ -671,6 +677,46 @@ phq tags list --event acme-2025 --partnership 1 --filter "unused=1"
 
 # Tags matching a name
 phq tags list --event acme-2025 --partnership 1 --filter "name_cont=sponsor"
+```
+
+---
+
+### assets
+
+Manage project assets (booths, tables, packages, ...) within an event. Every organization in the event gets an assignment for each asset — partners see them via `phq partner asset-assignments list`. Requires Assets to be turned on for the event (`phq events update <permalink> --data '{"enable_assets":true}'`).
+
+```bash
+phq assets list    --event <permalink> --partnership <id> [--filter "..."] [--sort "name desc"]
+phq assets get     <id> --event <permalink> --partnership <id>
+phq assets create  --event <permalink> --partnership <id> --name <name> [--task-ids 12,34]
+phq assets update  <id> --event <permalink> --partnership <id> [--name <name>] [--task-ids 12,34]
+phq assets delete  <id> --event <permalink> --partnership <id>
+```
+
+`--task-ids` takes IDs of tasks, resources, or internal tasks in the event. On `update` it replaces the linked tasks (`--task-ids ""` unlinks all); leave it off to keep them as they are.
+
+---
+
+### pages
+
+Manage Page Builder pages within an event. Pages are addressed by their slug, which is generated from the title on create. Requires the Page Builder to be turned on for the event (`phq events update <permalink> --data '{"page_builder_enabled":true}'`).
+
+```bash
+phq pages list    --event <permalink> --partnership <id> [--filter "..."] [--sort "title asc"]
+phq pages get     <slug> --event <permalink> --partnership <id>
+phq pages create  --event <permalink> --partnership <id> --title <title> [--content <html|@file>] [--background-color "#ffffff"] [--font-color "#212529"] [--published true]
+phq pages update  <slug> --event <permalink> --partnership <id> [--title <title>] [--content <html|@file>] [--background-color "#..."] [--font-color "#..."] [--published true|false]
+phq pages delete  <slug> --event <permalink> --partnership <id>
+```
+
+Responses include `public_url`, where a published page is visible to anyone.
+
+```bash
+# Create a published page from an HTML file
+phq pages create --event acme-2025 --partnership 1 --title "Parking" --content @parking.html --published true
+
+# Unpublished pages only
+phq pages list --event acme-2025 --partnership 1 --filter "published_eq=false"
 ```
 
 ---
