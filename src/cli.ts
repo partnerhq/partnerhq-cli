@@ -45,7 +45,7 @@ const program = new Command()
 program
   .name('phq')
   .description('PartnerHQ CLI — manage your events, partnerships, tasks, and more')
-  .version('0.4.0')
+  .version('0.5.0')
   .option('--test', 'Use the local dev environment (http://phq.test) instead of production')
   .option('--json', 'Output results as raw JSON')
   .option('--event <permalink>', 'Event permalink (overrides PHQ_EVENT env var)')
