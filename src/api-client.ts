@@ -2,7 +2,30 @@ import axios, { AxiosInstance, AxiosError, AxiosResponse } from 'axios'
 import ora from 'ora'
 import chalk from 'chalk'
 import fs from 'fs'
-import { getToken, getBaseUrl, resolveEnvironment } from './config'
+import { getToken, getBaseUrl, resolveEnvironment, getMasquerade, Environment } from './config'
+
+export const MASQUERADE_HEADER = 'X-PHQ-Masquerade-As'
+
+/** Bearer token plus the masquerade header when one is active. */
+export function authHeaders(env: Environment): Record<string, string> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${getToken(env)}` }
+  const masquerade = getMasquerade(env)
+  if (masquerade) headers[MASQUERADE_HEADER] = String(masquerade.id)
+  return headers
+}
+
+/** Tripwire: never let a masqueraded session silently run as the admin. */
+function verifyMasquerade(env: Environment, response: AxiosResponse): AxiosResponse {
+  const masquerade = getMasquerade(env)
+  if (masquerade && response.headers['x-phq-masquerading-as'] !== String(masquerade.id)) {
+    console.error(
+      chalk.red('✗') + ` Server did not confirm the masquerade as ${masquerade.email}. ` +
+      'Stopping. Run `phq whoami` to check who you are acting as.'
+    )
+    process.exit(1)
+  }
+  return response
+}
 
 export interface PaginatedResponse<T> {
   current_page: number
@@ -31,7 +54,7 @@ export function createClient(opts: ApiOptions): AxiosInstance {
   const client = axios.create({
     baseURL,
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaders(env),
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
@@ -39,7 +62,7 @@ export function createClient(opts: ApiOptions): AxiosInstance {
   })
 
   client.interceptors.response.use(
-    (response) => response,
+    (response) => verifyMasquerade(env, response),
     (error: AxiosError) => {
       if (error.response) {
         const status = error.response.status
@@ -192,7 +215,7 @@ export function createMultipartClient(opts: ApiOptions): AxiosInstance {
   const client = axios.create({
     baseURL,
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaders(env),
       Accept: 'application/json',
     },
     maxBodyLength: Infinity,
@@ -201,7 +224,7 @@ export function createMultipartClient(opts: ApiOptions): AxiosInstance {
   })
 
   client.interceptors.response.use(
-    (response) => response,
+    (response) => verifyMasquerade(env, response),
     (error: AxiosError) => {
       if (error.response) {
         const status = error.response.status

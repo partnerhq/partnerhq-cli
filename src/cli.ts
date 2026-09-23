@@ -4,6 +4,10 @@ import { Command } from 'commander'
 import { registerAuthCommands } from './commands/auth'
 import { registerConfigCommands } from './commands/config'
 import { registerWhoamiCommand } from './commands/whoami'
+import { registerMasqueradeCommands } from './commands/masquerade'
+import { getGlobalOpts } from './global-opts'
+import { resolveEnvironment } from './config'
+import { printMasqueradeBanner } from './output'
 import { registerDashboardCommand } from './commands/dashboard'
 import { registerMyEventsCommands } from './commands/my-events'
 import { registerMyOrganizationsCommands } from './commands/my-organizations'
@@ -47,10 +51,15 @@ program
   .option('--partnership <id>', 'Your partnership ID (overrides PHQ_PARTNERSHIP env var)')
   .option('-y, --yes', 'Skip confirmation prompts (for scripting)')
 
+program.hook('preAction', (_program, actionCommand) => {
+  printMasqueradeBanner(resolveEnvironment(getGlobalOpts(actionCommand).test))
+})
+
 // Utility commands
 registerAuthCommands(program)
 registerConfigCommands(program)
 registerWhoamiCommand(program)
+registerMasqueradeCommands(program)
 registerDashboardCommand(program)
 
 // Top-level commands (no event/partnership context required)

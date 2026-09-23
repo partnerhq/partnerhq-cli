@@ -4,7 +4,8 @@ import Table from 'cli-table3'
 import axios, { AxiosError } from 'axios'
 import ora from 'ora'
 import { getGlobalOpts } from '../global-opts'
-import { getToken, getBaseUrl, resolveEnvironment } from '../config'
+import { getToken, getBaseUrl, resolveEnvironment, Environment } from '../config'
+import { authHeaders } from '../api-client'
 import { printBanner } from '../output'
 
 interface Identity {
@@ -12,11 +13,12 @@ interface Identity {
   name: string
   email: string
   admin: boolean
+  masquerading_user: { id: number; email: string; name: string } | null
 }
 
-async function fetchIdentity(baseUrl: string, token: string): Promise<Identity> {
+async function fetchIdentity(baseUrl: string, env: Environment): Promise<Identity> {
   const res = await axios.get(`${baseUrl}/api/v1/me`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    headers: { ...authHeaders(env), Accept: 'application/json' },
     timeout: 10_000,
   })
   return {
@@ -24,6 +26,7 @@ async function fetchIdentity(baseUrl: string, token: string): Promise<Identity> 
     name: res.data.name,
     email: res.data.email,
     admin: res.data.admin,
+    masquerading_user: res.data.masquerading_user ?? null,
   }
 }
 
@@ -56,7 +59,7 @@ export function registerWhoamiCommand(program: Command): void {
       if (token) {
         const spinner = g.json ? null : ora('Fetching identity...').start()
         try {
-          identity = await fetchIdentity(baseUrl, token)
+          identity = await fetchIdentity(baseUrl, env)
           spinner?.stop()
         } catch (err) {
           identityError = classifyError(err)
@@ -70,6 +73,7 @@ export function registerWhoamiCommand(program: Command): void {
           base_url: baseUrl,
           authenticated: !!token,
           identity,
+          masquerading: !!identity?.masquerading_user,
           identity_error: identityError,
           event: g.event ?? null,
           partnership: g.partnership ?? null,
@@ -80,10 +84,16 @@ export function registerWhoamiCommand(program: Command): void {
       const identityTable = new Table({ style: { head: ['cyan'] } })
       if (identity) {
         identityTable.push(
-          [chalk.bold('Logged in as'), `${chalk.cyan(identity.name)} ${chalk.dim(`<${identity.email}>`)}`],
+          identity.masquerading_user
+            ? [chalk.bold('Acting as'), chalk.bgRed.white.bold(` ${identity.name} <${identity.email}> `) + chalk.red(' (masquerading)')]
+            : [chalk.bold('Logged in as'), `${chalk.cyan(identity.name)} ${chalk.dim(`<${identity.email}>`)}`],
           [chalk.bold('User ID'), chalk.cyan(String(identity.id))],
           [chalk.bold('Admin'), identity.admin ? chalk.yellow('✓ yes') : chalk.dim('—')],
         )
+        if (identity.masquerading_user) {
+          const real = identity.masquerading_user
+          identityTable.push([chalk.bold('Real user'), `${real.name} ${chalk.dim(`<${real.email}>`)} — ${chalk.cyan('phq masquerade stop')} to return`])
+        }
       } else if (token && identityError) {
         identityTable.push(
           [chalk.bold('Logged in as'), chalk.dim(`(offline — ${identityError})`)],

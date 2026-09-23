@@ -11,6 +11,7 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Authentication](#authentication)
+- [Masquerading (PHQ admins)](#masquerading-phq-admins)
 - [Persistent Configuration](#persistent-configuration)
 - [Environment Variables](#environment-variables)
 - [Test Mode](#test-mode)
@@ -171,6 +172,33 @@ phq auth status
 
   Active: production
 ```
+
+## Masquerading (PHQ admins)
+
+PartnerHQ employees (`admin` accounts) can run the CLI **as another user**, the API equivalent of
+"Masquerade" in the admin panel. Every command then runs with that user's access, and changes are
+recorded as theirs, with your admin account stored on the audit trail as the masquerader.
+
+```bash
+phq masquerade start jane@acme.com     # or a user ID: phq masquerade start 123
+phq tasks list                          # runs as Jane
+phq masquerade stop                     # back to yourself
+```
+
+You can't miss which account you are acting as:
+
+- **Every command** prints a red banner to **stderr**, even with `--json` (stdout stays parseable JSON):
+  ```
+   ⚠ MASQUERADING AS Jane Doe <jane@acme.com> (user #123)  real user: you@partnerhq.com · production · since 2h ago · stop: phq masquerade stop
+  ```
+- `phq whoami` shows "Acting as" plus the real user, and `--json` includes `masquerading` and `identity.masquerading_user`.
+- `start` asks the server to confirm the masquerade and saves nothing unless it does. A non-admin gets `403`.
+- Every response is checked against the server's `X-PHQ-Masquerading-As` header. If it doesn't match, the CLI stops.
+- The masquerade is saved separately for production and test (`~/.partnerhq/config.json`). It lasts until
+  `phq masquerade stop`, and `phq auth login` / `logout` clear it.
+
+**For agents (Claude etc.):** before any write, read the stderr banner or run `phq whoami --json` to confirm
+which user you are acting as. If the task isn't meant to run as that customer, run `phq masquerade stop` first.
 
 ---
 

@@ -7,10 +7,19 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
 
 export type Environment = 'production' | 'test'
 
+export interface Masquerade {
+  id: number
+  email: string
+  name: string
+  admin_email: string
+  since: string
+}
+
 interface EnvironmentConfig {
   token?: string
   client_id?: string
   client_secret?: string
+  masquerade?: Masquerade
 }
 
 interface Defaults {
@@ -79,13 +88,26 @@ export function setCredentials(env: Environment, creds: { token: string; clientI
     token: creds.token,
     client_id: creds.clientId,
     client_secret: creds.clientSecret,
+    masquerade: undefined,
   }
   writeConfig(config)
 }
 
 export function clearToken(env: Environment): void {
   const config = readConfig()
-  config[env] = { ...config[env], token: undefined }
+  config[env] = { ...config[env], token: undefined, masquerade: undefined }
+  writeConfig(config)
+}
+
+// --- Masquerade (PHQ admins acting as another user) ---
+
+export function getMasquerade(env: Environment): Masquerade | undefined {
+  return readConfig()[env]?.masquerade
+}
+
+export function setMasquerade(env: Environment, masquerade: Masquerade | undefined): void {
+  const config = readConfig()
+  config[env] = { ...config[env], masquerade }
   writeConfig(config)
 }
 
