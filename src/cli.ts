@@ -5,6 +5,7 @@ import { registerAuthCommands } from './commands/auth'
 import { registerConfigCommands } from './commands/config'
 import { registerWhoamiCommand } from './commands/whoami'
 import { registerMasqueradeCommands } from './commands/masquerade'
+import { registerAdminCommands } from './commands/admin'
 import { getGlobalOpts } from './global-opts'
 import { resolveEnvironment } from './config'
 import { printMasqueradeBanner } from './output'
@@ -60,6 +61,7 @@ registerAuthCommands(program)
 registerConfigCommands(program)
 registerWhoamiCommand(program)
 registerMasqueradeCommands(program)
+registerAdminCommands(program)
 registerDashboardCommand(program)
 
 // Top-level commands (no event/partnership context required)

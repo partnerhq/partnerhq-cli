@@ -185,6 +185,21 @@ phq tasks list                          # runs as Jane
 phq masquerade stop                     # back to yourself
 ```
 
+Finding who to masquerade as (admin-only lookups; they keep working while masquerading):
+
+```bash
+phq admin projects --search "summer fest"          # each project with its customer + owner
+phq admin projects --organization "Acme"           # a customer's projects
+phq admin users --search jane                      # name/email substring, or a user ID
+phq admin users --organization "Acme"              # a customer's members (owner marked)
+phq admin users --project summer-fest-2026         # everyone on a project
+phq masquerade start --owner-of summer-fest-2026   # masquerade as a project's owner
+```
+
+`--project`, `--search` on projects, and `--owner-of` take a name substring, an exact permalink (which
+always wins), or an ID. `--owner-of` refuses if more than one project matches and lists them, so pick
+the exact permalink or ID.
+
 You can't miss which account you are acting as:
 
 - **Every command** prints a red banner to **stderr**, even with `--json` (stdout stays parseable JSON):
