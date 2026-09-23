@@ -1,5 +1,9 @@
+import fs from 'fs'
+import path from 'path'
+import FormData from 'form-data'
+import chalk from 'chalk'
 import { Command } from 'commander'
-import { createClient, withSpinner } from '../api-client'
+import { createClient, createMultipartClient, withSpinner } from '../api-client'
 import { printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts } from '../global-opts'
 import { confirmOrExit } from '../prompt'
@@ -55,20 +59,43 @@ export function registerEventsCommands(program: Command): void {
     .option('--welcome-message <message>', 'New welcome message')
     .option('--brand-color <hex>', 'New brand color hex')
     .option('--data <json>', EVENT_DATA_HELP)
+    .option('--logo <path>', 'Upload a logo image file for the event')
+    .option('--remove-logo', 'Remove the event logo')
     .action(async (permalink, opts, cmd) => {
       const g = getGlobalOpts(cmd)
       printBanner(g.test, g.json)
+      if (opts.logo && opts.removeLogo) {
+        console.error(chalk.red('✗') + ' Use either --logo or --remove-logo, not both.')
+        process.exit(1)
+      }
+      const logoPath = opts.logo ? path.resolve(opts.logo) : undefined
+      if (logoPath && !fs.existsSync(logoPath)) {
+        console.error(chalk.red('✗') + ` File not found: ${logoPath}`)
+        process.exit(1)
+      }
       const client = createClient({ test: g.test })
       let body: Record<string, unknown> = {}
       if (opts.name) body.name = opts.name
       if (opts.welcomeMessage) body.welcome_message = opts.welcomeMessage
       if (opts.brandColor) body.brand_color_hex = opts.brandColor
+      if (opts.removeLogo) body.remove_logo = true
       if (opts.data) body = deepMerge(body, parseDataFlag(opts.data))
 
-      const response = await withSpinner('Updating event...', () =>
-        client.patch(`/api/v1/events/${permalink}`, { event: body })
-      )
-      printObject(response.data, { json: g.json })
+      let response
+      if (!logoPath || Object.keys(body).length > 0) {
+        response = await withSpinner('Updating event...', () =>
+          client.patch(`/api/v1/events/${permalink}`, { event: body })
+        )
+      }
+      if (logoPath) {
+        const form = new FormData()
+        form.append('event[logo]', fs.createReadStream(logoPath), { filename: path.basename(logoPath) })
+        const multipart = createMultipartClient({ test: g.test })
+        response = await withSpinner('Uploading logo...', () =>
+          multipart.patch(`/api/v1/events/${permalink}`, form, { headers: form.getHeaders() })
+        )
+      }
+      printObject(response!.data, { json: g.json })
     })
 
   events

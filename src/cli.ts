@@ -15,6 +15,8 @@ import { registerResourcesCommands } from './commands/resources'
 import { registerInternalTasksCommands } from './commands/internal-tasks'
 import { registerAnnouncementsCommands } from './commands/announcements'
 import { registerTagsCommands } from './commands/tags'
+import { registerAssetsCommands } from './commands/assets'
+import { registerPagesCommands } from './commands/pages'
 import { registerTaskCompletionsCommands } from './commands/task-completions'
 import { registerAuthorizationsCommands } from './commands/authorizations'
 import { registerMessagesCommands } from './commands/messages'
@@ -38,7 +40,7 @@ const program = new Command()
 program
   .name('phq')
   .description('PartnerHQ CLI — manage your events, partnerships, tasks, and more')
-  .version('0.3.0')
+  .version('0.4.0')
   .option('--test', 'Use the local dev environment (http://phq.test) instead of production')
   .option('--json', 'Output results as raw JSON')
   .option('--event <permalink>', 'Event permalink (overrides PHQ_EVENT env var)')
@@ -64,6 +66,8 @@ registerResourcesCommands(program)
 registerInternalTasksCommands(program)
 registerAnnouncementsCommands(program)
 registerTagsCommands(program)
+registerAssetsCommands(program)
+registerPagesCommands(program)
 registerTaskCompletionsCommands(program)
 registerAuthorizationsCommands(program)
 registerMessagesCommands(program)
