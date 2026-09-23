@@ -4,6 +4,11 @@ import { Command } from 'commander'
 import { registerAuthCommands } from './commands/auth'
 import { registerConfigCommands } from './commands/config'
 import { registerWhoamiCommand } from './commands/whoami'
+import { registerMasqueradeCommands } from './commands/masquerade'
+import { registerAdminCommands } from './commands/admin'
+import { getGlobalOpts } from './global-opts'
+import { resolveEnvironment } from './config'
+import { printMasqueradeBanner } from './output'
 import { registerDashboardCommand } from './commands/dashboard'
 import { registerMyEventsCommands } from './commands/my-events'
 import { registerMyOrganizationsCommands } from './commands/my-organizations'
@@ -40,17 +45,23 @@ const program = new Command()
 program
   .name('phq')
   .description('PartnerHQ CLI — manage your events, partnerships, tasks, and more')
-  .version('0.5.0')
+  .version('0.6.0')
   .option('--test', 'Use the local dev environment (http://phq.test) instead of production')
   .option('--json', 'Output results as raw JSON')
   .option('--event <permalink>', 'Event permalink (overrides PHQ_EVENT env var)')
   .option('--partnership <id>', 'Your partnership ID (overrides PHQ_PARTNERSHIP env var)')
   .option('-y, --yes', 'Skip confirmation prompts (for scripting)')
 
+program.hook('preAction', (_program, actionCommand) => {
+  printMasqueradeBanner(resolveEnvironment(getGlobalOpts(actionCommand).test))
+})
+
 // Utility commands
 registerAuthCommands(program)
 registerConfigCommands(program)
 registerWhoamiCommand(program)
+registerMasqueradeCommands(program)
+registerAdminCommands(program)
 registerDashboardCommand(program)
 
 // Top-level commands (no event/partnership context required)

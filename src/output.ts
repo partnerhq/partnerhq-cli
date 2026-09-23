@@ -1,6 +1,7 @@
 import chalk from 'chalk'
 import Table from 'cli-table3'
 import { PaginatedResponse } from './api-client'
+import { Environment, getMasquerade } from './config'
 
 export interface PrintOptions {
   json: boolean
@@ -16,6 +17,27 @@ export function printBanner(test: boolean, json: boolean): void {
   if (json || bannerShown || !test) return
   bannerShown = true
   console.log(chalk.bgYellow.black(' ⚠ TEST MODE ') + chalk.yellow(' http://phq.test') + '\n')
+}
+
+function timeAgo(iso: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
+  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 60 * 48) return `${Math.round(minutes / 60)}h ago`
+  return `${Math.round(minutes / 1440)}d ago`
+}
+
+/**
+ * Printed before every command while masquerading. Goes to stderr and ignores
+ * --json on purpose: JSON on stdout stays parseable, but whoever (or whatever
+ * agent) is running the CLI always sees who they are acting as.
+ */
+export function printMasqueradeBanner(env: Environment): void {
+  const m = getMasquerade(env)
+  if (!m) return
+  console.error(
+    chalk.bgRed.white.bold(` ⚠ MASQUERADING AS ${m.name} <${m.email}> (user #${m.id}) `) +
+    chalk.red(` real user: ${m.admin_email} · ${env} · since ${timeAgo(m.since)} · stop: phq masquerade stop`)
+  )
 }
 
 /**
