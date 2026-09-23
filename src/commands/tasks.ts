@@ -4,6 +4,7 @@ import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 import { confirmOrExit } from '../prompt'
 import { parseDataFlag, deepMerge } from '../data-flag'
+import { registerResultsCommands } from '../results'
 
 const LIST_COLS = ['id', 'label', 'type', 'pinned', 'locked', 'advance', 'due_at', 'published_at', 'created_at']
 
@@ -181,4 +182,5 @@ export function registerTasksCommands(program: Command): void {
       })
   }
 
+  registerResultsCommands(cmd, 'tasks', 'task')
 }
