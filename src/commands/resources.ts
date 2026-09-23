@@ -4,6 +4,7 @@ import { printList, printObject, printSuccess, printBanner } from '../output'
 import { getGlobalOpts, requireEventAndPartnership } from '../global-opts'
 import { confirmOrExit } from '../prompt'
 import { parseDataFlag, deepMerge } from '../data-flag'
+import { registerResultsCommands } from '../results'
 
 const LIST_COLS = ['id', 'label', 'go_to_link', 'pinned', 'locked', 'published_at', 'created_at']
 
@@ -175,4 +176,5 @@ export function registerResourcesCommands(program: Command): void {
       printObject(response.data, { json: g.json })
     })
 
+  registerResultsCommands(cmd, 'resources', 'resource')
 }

@@ -550,7 +550,26 @@ phq tasks delete  <id>   --event <permalink> --partnership <id>
 phq tasks toggle-archive <id> --event <permalink> --partnership <id>
 phq tasks publish   <id> --event <permalink> --partnership <id>   # visible to partners
 phq tasks unpublish <id> --event <permalink> --partnership <id>   # back to draft
+phq tasks results        <id> --event <permalink> --partnership <id>   # the Results grid
+phq tasks results-update <id> --event <permalink> --partnership <id> --set <tc>:<field>=<value> [--set ...] [--data <json|@file>]
 ```
+
+**Filling in the Results grid.** `results` shows the same grid as the web **Results** page: one row per
+organization (keyed by `task_completion_id`) and one column per custom field, with the field id in
+`[brackets]`. `results-update` writes cells; every change in one call applies together or not at all.
+
+```bash
+phq tasks results 400
+#  task_completion_id | organization | completed_at | Shirt size [55] | Days [56]
+
+phq tasks results-update 400 --set '9001:55=Large' --set '9002:55=Small'
+phq tasks results-update 400 --set '9001:56=Fri, Sun'      # checkbox group: comma-separated
+phq tasks results-update 400 --data @changes.json          # {"changes":[{"task_completion_id":9001,"custom_field_id":55,"value":"Large"}]}
+```
+
+Checkbox cells take `true`/`false`; file and image cells take a token from `phq partner uploads custom-field-file create`.
+Editing requires the host permission "This host can make updates via the task results view" (set by the
+project owner on your individual); without it, `results` still works and marks field columns read-only.
 
 `--sort` takes a Ransack sort (`"label asc"`) or one of the computed sorts the web tasks table uses: `completed_count`, `assigned_count`, `views_count`, `field_count`, `has_signature`, `response_rate`, `overdue_count`. Computed sorts honor `--direction` (default `desc`).
 
@@ -601,6 +620,8 @@ phq resources delete  <id>   --event <permalink> --partnership <id>
 phq resources toggle-archive <id> --event <permalink> --partnership <id>
 phq resources publish   <id> --event <permalink> --partnership <id>
 phq resources unpublish <id> --event <permalink> --partnership <id>
+phq resources results        <id> --event <permalink> --partnership <id>   # same as tasks results
+phq resources results-update <id> --event <permalink> --partnership <id> --set <tc>:<field>=<value>
 
 # Set display positions in bulk (map of resource ID to position)
 phq resources reorder --positions '{"500":1,"501":2}' --event <permalink> --partnership <id>
