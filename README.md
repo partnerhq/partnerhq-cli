@@ -33,16 +33,22 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [tags](#tags)
   - [assets](#assets)
   - [pages](#pages)
+  - [overview](#overview)
   - [task-completions](#task-completions)
   - [authorizations](#authorizations)
   - [messages](#messages)
   - [invitations](#invitations)
   - [inbox](#inbox)
+  - [blocks](#blocks)
+  - [notifications](#notifications)
   - [notes](#notes)
   - [task-completion-rules](#task-completion-rules)
   - [self-registration-links](#self-registration-links)
   - [custom-exports](#custom-exports)
   - [task-zip-exports](#task-zip-exports)
+  - [contracts](#contracts)
+  - [floor-plans](#floor-plans)
+  - [booths](#booths)
   - [partner profile](#partner-profile)
   - [partner org-partnerships](#partner-org-partnerships)
   - [partner task-completions](#partner-task-completions)
@@ -51,6 +57,8 @@ You can invoke the CLI using either `partnerhq` or `phq` — they are identical.
   - [partner uploads](#partner-uploads)
   - [partner asset-assignments](#partner-asset-assignments)
   - [partner event](#partner-event)
+  - [partner contracts](#partner-contracts)
+  - [partner booth-map](#partner-booth-map)
 - [Task completion status](#task-completion-status)
 - [Short-lived download links](#short-lived-download-links)
 - [Power user: --data for nested attributes](#power-user---data-for-nested-attributes)
@@ -195,6 +203,18 @@ phq admin users --organization "Acme"              # a customer's members (owner
 phq admin users --project summer-fest-2026         # everyone on a project
 phq masquerade start --owner-of summer-fest-2026   # masquerade as a project's owner
 ```
+
+Creating a customer (account-level) organization, admin-only like the lookups above:
+
+```bash
+phq admin organizations create --name "Acme Festivals" --owner-email jane@acme.com \
+  --owner-first-name Jane --owner-last-name Doe
+```
+
+The name must be unique. An existing user with that email becomes the owner as-is (their current organization
+doesn't change). A new email creates the user, who gets the usual confirm-email message plus a set-password link (valid 6 hours;
+after that they use "Forgot password"). No password is printed. No
+billing is set up; do that in ActiveAdmin.
 
 `--project`, `--search` on projects, and `--owner-of` take a name substring, an exact permalink (which
 always wins), or an ID. `--owner-of` refuses if more than one project matches and lists them, so pick
@@ -520,6 +540,13 @@ phq events update acme-2025 --remove-logo
 phq events update acme-2025 --data '{"page_builder_enabled":true,"pdf_download_link_position":"below"}'
 phq events update acme-2025 --data '{"email_domain_id":3,"inherit_organization_email_domain":false}'
 
+# Celebrate task completions with confetti
+phq events create --name "..." --confetti true
+phq events update <permalink> --confetti false
+
+# Copy a project (runs in the background; you get a notification and email when ready)
+phq events copy <permalink> --name "New name" [--organization <id>] [--copy-individuals] [--skip tags --skip assets]
+
 # Delete an event (will ask for confirmation)
 phq events delete <permalink>
 phq events archive <permalink>       # archive a project (irreversible via the API)
@@ -811,13 +838,30 @@ phq pages list --event acme-2025 --partnership 1 --filter "published_eq=false"
 
 ---
 
+### overview
+
+Host overview actions: partner status, reminders, and disregarding task completions. Host only.
+
+```bash
+phq overview partner-status [--range today|7d|14d|30d|custom] [--start YYYY-MM-DD --end YYYY-MM-DD] --event <permalink> --partnership <id>
+phq overview remind     --task-completion-id <id> [--task-completion-id <id> ...] [--force] --event <permalink> --partnership <id>
+phq overview disregard  --task-completion-id <id> [...] --event <permalink> --partnership <id>
+phq overview restore    --task-completion-id <id> [...] --event <permalink> --partnership <id>
+```
+
+---
+
 ### task-completions
 
 Manage task assignment records (which orgs/partners are assigned to which tasks). Task completions cannot be created or deleted directly — they are created automatically when tasks are assigned.
 
 ```bash
 phq task-completions list     --event <permalink> --partnership <id> [--filter "..."] [--sort "due_at asc"] \
-  [--status needs_approval|awaiting_others] [--task-id <id> [--sort activity|status] [--direction asc|desc]]
+  [--status needs_approval|awaiting_others] [--task-id <id> [--sort activity|status] [--direction asc|desc]] \
+  [--individual-id <id>] [--payment-status paid|deposit_paid|partially_paid|unpaid]   # payment status needs --task-id
+phq task-completions list --assignments --event <permalink> --partnership <id> [--assigned-partnership-id <id>]... \
+  [--task-ids <id>]... [--task-type ToDo|InternalTask]... [--assignment-status incomplete|complete|overdue|not_approved]... \
+  [--due-from <date>] [--due-to <date>] [--search text]
 phq task-completions get      <id>   --event <permalink> --partnership <id>
 phq task-completions update   <id>   --event <permalink> --partnership <id> [--enabled true|false] [--due-at "..."] [--assigned-partnership-id <id>]
 phq task-completions complete <id>   --event <permalink> --partnership <id>
@@ -832,7 +876,17 @@ phq task-completions not-approve         <id> --note "..."   --event <permalink>
 # Signature tasks: get the signed PDF or certificate of completion (URL, or save with --output)
 phq task-completions download-signed-pdf  <id> [--output signed.pdf]      --event <permalink> --partnership <id>
 phq task-completions download-certificate <id> [--output certificate.pdf] --event <permalink> --partnership <id>
+phq task-completions regenerate-signature <id> --event <permalink> --partnership <id>
+phq task-completions replace-signature    <id> --event <permalink> --partnership <id>
+
+# Offline (cash, check, other) payments
+phq task-completions offline-payments create <taskCompletionId> --amount 100.00 --method check|cash|other [--reference "..."] [--received-on YYYY-MM-DD] [--note "..."] --event <permalink> --partnership <id>
+phq task-completions offline-payments void   <taskCompletionId> <orderToken> [--reason "..."] --event <permalink> --partnership <id>
 ```
+
+`regenerate-signature` regenerates a stale DocuSign document; `replace-signature` swaps in an updated signed contract (host only, no file upload). `offline-payments create` returns `order_token` and `payment_summary`; use the token to void.
+
+`list --assignments` returns collection rows with `assignment_status` plus a `people` array of per-person counts (max 100 per page). The `--assigned-partnership-id`, `--task-ids`, `--task-type` and `--assignment-status` flags are repeatable.
 
 `request-changes` and `not-approve` require `--note` (the CLI refuses to send the request without one). `not-approve` denies the submission; a denial normally also sets `completed_at`, which is why the list shows a derived `status` column — see [Task completion status](#task-completion-status).
 
@@ -1001,6 +1055,37 @@ to parent nodes.
 
 ---
 
+### blocks
+
+Users you have blocked (not event-scoped).
+
+```bash
+phq blocks list
+phq blocks remove <id>
+```
+
+---
+
+### notifications
+
+Your notifications (not event-scoped). `--event <permalink>` (explicit flag only) narrows list, read-all and dismiss-all to one event.
+
+```bash
+phq notifications list [--per-page 30] [--before <iso8601> --before-id <id>]
+phq notifications read <id> [<id> ...]
+phq notifications read-all
+phq notifications dismiss <id>
+phq notifications dismiss-all
+phq notifications restore <id>
+phq notifications prefs
+phq notifications prefs --set task_assigned=false --set chat_message=true
+phq notifications prefs --data '{"announcement":false}'
+```
+
+Categories: task_assigned, task_completed, approval_requested, approval_decided, signing_turn, signature_declined, self_registration, chat_message, announcement, project_copied.
+
+---
+
 ### notes
 
 Host-only internal notes on tasks, resources, internal tasks, individuals, and
@@ -1062,6 +1147,9 @@ phq custom-exports create [--custom-field 55 --custom-field 56] [--include-users
   [--memo "Quarterly pull"] --event <permalink> --partnership <id>
 phq custom-exports get      <token> --event <permalink> --partnership <id>   # processing | ready
 phq custom-exports download <token> [--output export.csv] --event <permalink> --partnership <id>
+
+# List the columns and datasets available for a bulk export of a table selection
+phq custom-exports options --source tasks_index|organizations_index [--selection '{"ids":[1,2]}'] [--cols a,b] --event <permalink> --partnership <id>
 ```
 
 The download URL expires in **60 seconds** — see [Short-lived download links](#short-lived-download-links).
@@ -1081,6 +1169,45 @@ phq task-zip-exports download <token> [--output files.zip] --event <permalink> -
 ```
 
 The download URL expires in **60 seconds** — see [Short-lived download links](#short-lived-download-links).
+
+---
+
+### contracts
+
+List contracts, show one with its line items, and toggle a line item between pending and fulfilled (host).
+
+```bash
+phq contracts list [--filter name_cont=acme] [--sort "name asc"] [--page 1] [--per-page 30]
+phq contracts show <id>
+phq contracts toggle-line-item <contractId> <lineItemId>
+```
+
+---
+
+### floor-plans
+
+Manage floor plans and booth assignments (host). The API has no list endpoint; use the plan id. Creating or replacing a rendering needs the PDF plus a PNG of page 1 and overlapping PNG tiles (rendered client-side).
+
+```bash
+phq floor-plans show <id>
+phq floor-plans create --name "Main hall" --source-document plan.pdf --image page1.png --width 4000 --height 3000 --tiles @tiles.json [--names-published] [--assignment-field <id>] [--status-field <id>] [--data '{"status_colors":{"Paid":"green"}}']
+phq floor-plans update <id> [--name ...] [--names-published true|false] [--source-document ... --image ... --tiles ...]
+phq floor-plans delete <id>
+phq floor-plans detect <id>
+phq floor-plans assign <id> --organization-partnership <id> --booth <boothId> [--booth ...] [--mode assign|move|share|unassign]
+```
+
+---
+
+### booths
+
+Fix booths on a floor plan after detection (host). Coordinates are on a 0-1000 image scale.
+
+```bash
+phq booths create <floorPlanId> --label A1 --x1 10 --y1 10 --x2 60 --y2 40
+phq booths update <id> --label B2
+phq booths delete <id>
+```
 
 ---
 
@@ -1155,7 +1282,10 @@ phq partner chat list                    --event <permalink> --partnership <id> 
 phq partner chat show     <identifier>   --event <permalink> --partnership <id>
 phq partner chat messages <identifier>   --event <permalink> --partnership <id> [--page N] [--per-page N]
 phq partner chat send     <identifier>   --event <permalink> --partnership <id> --text "Hello team!"
+phq partner chat block-author <identifier> <messageId> --event <permalink> --partnership <id>
 ```
+
+`block-author` blocks the author of a message (not your own, not bots, only user-authored editable messages). Manage blocks with [`phq blocks`](#blocks).
 
 `list` returns every chat channel the caller has access to in the project: their own partnership channel (the "Project chat" / dashboard chat) plus the chat channels for any task completions belonging to their organizations. Hosts see every channel in the project. Each row carries an `identifier` (use it with the other subcommands), the `channelable_type` (`Partnership` or `TaskCompletion`), the `channelable_id`, a human-readable `label`, and — for `TaskCompletion` rows — `task_completion_id` and `task_type` so callers can filter or scope. Each row also has `unread_count` (unread messages for you) and `flagged` (you marked the thread unread); `--json` adds `last_message`.
 
@@ -1222,6 +1352,27 @@ phq partner event get --event <permalink> --partnership <id> [--json]
 ```
 
 Returns `id`, `name`, `permalink`, `description`, `brand_color_hex`, `logo_thumb_url`, `time_zone`, `archived`, `deactivated`, and feature flags (`allow_teammate_invitations`, `enable_assets`, `enable_choice_limits`, `fundraising_enabled`, `page_builder_enabled`, `pdf_download_link_position`). The welcome message is printed as plain text below the table.
+
+---
+
+### partner contracts
+
+Contracts with your organizations (partner view, read-only).
+
+```bash
+phq partner contracts list [--filter ...] [--sort ...]
+phq partner contracts show <id>
+```
+
+---
+
+### partner booth-map
+
+Floor plan from a Resource, with your booths marked `mine`.
+
+```bash
+phq partner booth-map --custom-field <id> [--organization-partnership <id>]
+```
 
 ---
 

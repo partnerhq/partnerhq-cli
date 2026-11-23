@@ -73,6 +73,26 @@ export function registerCustomExportsCommands(program: Command): void {
       printObject(response.data, { json: g.json })
     })
 
+  cmd
+    .command('options')
+    .description('List the columns and datasets available for a bulk export of a table selection')
+    .requiredOption('--source <source>', 'tasks_index or organizations_index')
+    .option('--selection <json>', 'Selection JSON, e.g. {"ids":[1,2]} or {"all_matching":true,"q":{...}} (default: empty)')
+    .option('--cols <cols>', 'Columns currently visible in the table (comma-separated)')
+    .action(async (opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const params: Record<string, unknown> = { source: opts.source }
+      if (opts.selection) params.selection = opts.selection
+      if (opts.cols) params.cols = opts.cols
+      const response = await withSpinner('Fetching export options...', () =>
+        client.get(`/api/v1/e/${event}/p/${partnership}/custom_exports/options`, { params })
+      )
+      printObject(response.data, { json: g.json })
+    })
+
   addGet(cmd, 'custom_exports')
   addDownload(cmd, 'custom_exports', 'CSV')
 }

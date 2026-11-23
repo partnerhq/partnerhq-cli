@@ -39,13 +39,20 @@ import { registerPartnerInvitationsCommands } from './commands/partner/invitatio
 import { registerPartnerUploadsCommands } from './commands/partner/uploads'
 import { registerPartnerAssetAssignmentsCommands } from './commands/partner/asset-assignments'
 import { registerPartnerEventCommands } from './commands/partner/event'
+import { registerContractsCommands } from './commands/contracts'
+import { registerFloorPlansCommands, registerBoothsCommands } from './commands/floor-plans'
+import { registerPartnerContractsCommands } from './commands/partner/contracts'
+import { registerPartnerBoothMapCommands } from './commands/partner/booth-map'
+import { registerOverviewCommands } from './commands/overview'
+import { registerBlocksCommands } from './commands/blocks'
+import { registerNotificationsCommands } from './commands/notifications'
 
 const program = new Command()
 
 program
   .name('phq')
   .description('PartnerHQ CLI — manage your events, partnerships, tasks, and more')
-  .version('0.6.0')
+  .version('0.7.0')
   .option('--test', 'Use the local dev environment (http://phq.test) instead of production')
   .option('--json', 'Output results as raw JSON')
   .option('--event <permalink>', 'Event permalink (overrides PHQ_EVENT env var)')
@@ -89,6 +96,12 @@ registerTaskCompletionRulesCommands(program)
 registerSelfRegistrationLinksCommands(program)
 registerCustomExportsCommands(program)
 registerTaskZipExportsCommands(program)
+registerContractsCommands(program)
+registerFloorPlansCommands(program)
+registerBoothsCommands(program)
+registerOverviewCommands(program)
+registerBlocksCommands(program)
+registerNotificationsCommands(program)
 
 // Partner sub-commands — grouped under `partner`
 const partnerCmd = program
@@ -103,6 +116,8 @@ registerPartnerInvitationsCommands(partnerCmd)
 registerPartnerUploadsCommands(partnerCmd)
 registerPartnerAssetAssignmentsCommands(partnerCmd)
 registerPartnerEventCommands(partnerCmd)
+registerPartnerContractsCommands(partnerCmd)
+registerPartnerBoothMapCommands(partnerCmd)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err)

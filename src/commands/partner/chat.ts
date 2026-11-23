@@ -138,4 +138,18 @@ export function registerPartnerChatCommands(cmd: Command): void {
       )
       printObject(response.data, { json: g.json })
     })
+
+  chat
+    .command('block-author <identifier> <messageId>')
+    .description("Block a message's author (hides their messages from you; manage with `blocks`)")
+    .action(async (identifier, messageId, _opts, cmd) => {
+      const g = getGlobalOpts(cmd)
+      printBanner(g.test, g.json)
+      const { event, partnership } = requireEventAndPartnership(g)
+      const client = createClient({ test: g.test })
+      const response = await withSpinner('Blocking author...', () =>
+        client.post(`/api/v1/e/${event}/p/${partnership}/partner/chat_channels/${identifier}/messages/${messageId}/block_author`)
+      )
+      printObject(response.data, { json: g.json })
+    })
 }
